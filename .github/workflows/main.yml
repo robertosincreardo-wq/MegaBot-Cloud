@@ -1,0 +1,23 @@
+name: Ejecutar Bot de Acortadores
+on:
+  schedule:
+    - cron: '0 */2 * * *' # Se ejecuta cada 2 horas automáticamente
+  workflow_dispatch:      # Permite ejecutarlo manualmente con un botón
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar Código
+        uses: actions/checkout@v3
+
+      - name: Instalar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11' # Usamos una estable, nada de 3.14
+
+      - name: Instalar Dependencias
+        run: pip install -r requirements.txt
+
+      - name: Correr Bot
+        run: python bot.py
