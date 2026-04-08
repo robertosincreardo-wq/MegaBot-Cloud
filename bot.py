@@ -5,80 +5,86 @@ from selenium.webdriver.support import expected_conditions as EC
 import time
 import random
 import requests
+import re
 
-def obtener_proxy():
-    print("[*] Buscando IP para evadir bloqueo...")
+def obtener_proxy_real():
+    print("[*] Buscando IP válida...")
+    fuente = "https://proxyscrape.com"
     try:
-        # Intentamos obtener un proxy HTTP/S que funcione
-        r = requests.get("https://proxyscrape.com", timeout=5)
-        return random.choice(r.text.splitlines())
+        r = requests.get(fuente, timeout=10)
+        # Usamos una expresión regular para extraer solo IPs reales (formato 0.0.0.0:0000)
+        ips = re.findall(r'\d+\.\d+\.\d+\.\d+:\d+', r.text)
+        if ips:
+            seleccionada = random.choice(ips)
+            print(f"[!] IP encontrada y validada: {seleccionada}")
+            return seleccionada
     except:
-        return None
+        pass
+    print("[?] No se encontró proxy limpio, usando IP directa.")
+    return None
 
 def procesar_capa(driver):
     wait = WebDriverWait(driver, 25)
-    url_actual = driver.current_url
-    print(f"[*] URL Actual: {url_actual}")
-
-    if "hotmart.com" in url_actual:
-        print("[!!!] ¡EXITO! Llegamos a Hotmart.")
-        return "FIN"
-
     try:
-        # Detectar Formulario de Captcha
-        if driver.find_elements(By.ID, "form-captcha"):
-            print("[...] Etapa 1 detectada. Esperando carga...")
-            time.sleep(12)
-            driver.execute_script("document.getElementById('form-captcha').submit();")
-            print("[+] Formulario enviado.")
-            return "CONTINUE"
+        url_actual = driver.current_url
+        print(f"[*] URL: {url_actual}")
 
-        # Detectar Botón Get Link
+        if "hotmart.com" in url_actual:
+            print("[!!!] ¡EXITO TOTAL EN HOTMART!")
+            return "FIN"
+
+        # Etapa 1: Captcha Invisible
+        if driver.find_elements(By.ID, "form-captcha"):
+            print("[...] Etapa 1. Esperando 15s...")
+            time.sleep(15)
+            driver.execute_script("document.getElementById('form-captcha').submit();")
+            return "SIGUE"
+
+        # Etapa 2: Botón Get Link
         elif driver.find_elements(By.ID, "btn-main"):
-            print("[...] Etapa 2 detectada. Esperando contador...")
+            print("[...] Etapa 2. Esperando 10s...")
             time.sleep(10)
             boton = wait.until(EC.element_to_be_clickable((By.ID, "btn-main")))
             driver.execute_script("arguments.click();", boton)
-            print("[+] Click en Get Link.")
-            return "CONTINUE"
+            return "SIGUE"
         
         else:
-            # Si no hay nada, quizá la página no cargó por la IP
-            print("[-] No se detectan botones. Reintentando carga...")
+            print("[-] Sin botones. Reintentando...")
             driver.refresh()
             time.sleep(8)
-            return "CONTINUE"
-
+            return "SIGUE"
     except Exception as e:
-        print(f"[-] Error: {e}")
+        print(f"[-] Error en capa: {e}")
         return "ERROR"
 
 if __name__ == "__main__":
-    # 1. Obtener un proxy antes de iniciar
-    proxy = obtener_proxy()
+    proxy = obtener_proxy_real()
     
     options = uc.ChromeOptions()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
     
     if proxy:
-        print(f"[!] Usando Proxy: {proxy}")
         options.add_argument(f'--proxy-server={proxy}')
 
-    driver = uc.Chrome(options=options, version_main=146)
+    # Iniciar navegador con manejo de errores
+    try:
+        driver = uc.Chrome(options=options, version_main=146)
+    except:
+        # Si falla con proxy, iniciamos sin él
+        driver = uc.Chrome(options=options.remove_argument(f'--proxy-server={proxy}') if proxy else options, version_main=146)
 
     try:
         with open("links.txt", "r") as f:
-            links = [l.strip() for l in f if l.strip()]
+            enlaces = [l.strip() for l in f if l.strip()]
         
-        for link in links:
-            print(f"\n--- Iniciando Cadena: {link} ---")
+        for link in enlaces:
+            print(f"\n--- Iniciando: {link} ---")
             driver.get(link)
-            for i in range(12): # Soporta las 5 capas de la cadena
-                res = procesar_capa(driver)
-                if res == "FIN": break
+            for _ in range(12): # Para las 5 capas
+                status = procesar_capa(driver)
+                if status == "FIN": break
                 time.sleep(5)
     finally:
         driver.quit()
