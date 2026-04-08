@@ -1,31 +1,24 @@
 import asyncio
 from playwright.async_api import async_playwright
 import random
-import requests
-import re
+import time
 
-async def obtener_proxies_github():
-    print("[*] Descargando lista de IPs desde GitHub Raw...")
-    # Usamos una lista de proxies HTTP actualizada que vive en GitHub
-    url = "https://githubusercontent.com"
-    try:
-        r = requests.get(url, timeout=10)
-        ips = re.findall(r'\d+\.\d+\.\d+\.\d+:\d+', r.text)
-        if ips:
-            print(f"[!] Se encontraron {len(ips)} IPs.")
-            return ips
-    except:
-        pass
-    return []
+# LISTA DE PROXIES HARDCODED (Para que no dependa de internet para bajarlos)
+# Estos son proxies publicos que rotan mucho, si fallan los cambiaremos.
+LISTA_PROXIES = [
+    "167.94.138.42:80", "167.94.145.106:80", "167.94.139.117:80",
+    "167.94.146.46:80", "206.189.155.145:80", "159.203.81.164:80",
+    "165.227.223.111:80", "138.197.148.215:80", "167.71.201.21:80"
+]
 
 async def saltar_ouo(page, url):
     print(f"[*] Iniciando: {url}")
     try:
-        # Cargamos la página
+        # Cargamos la página con un tiempo de espera largo
         await page.goto(url, wait_until="domcontentloaded", timeout=60000)
         
         for i in range(12):
-            await asyncio.sleep(10)
+            await asyncio.sleep(12)
             url_actual = page.url
             print(f"[*] Capa {i+1} - URL: {url_actual}")
 
@@ -33,7 +26,6 @@ async def saltar_ouo(page, url):
                 print("[!!!] ¡EXITO TOTAL! Llegamos a Hotmart.")
                 return True
 
-            # Intentamos las dos formas de saltar que tiene Ouo
             try:
                 # 1. Enviar el formulario invisible (Etapa 1)
                 await page.evaluate("if(document.getElementById('form-captcha')) document.getElementById('form-captcha').submit();")
@@ -47,18 +39,16 @@ async def saltar_ouo(page, url):
                 pass
                 
     except Exception as e:
-        print(f"[X] Error: {e}")
+        print(f"[X] Error en navegación: {e}")
 
 async def main():
-    ips = await obtener_proxies_github()
-    if not ips:
-        print("[X] No se pudo obtener ninguna IP. Revisa la conexión.")
-        return
+    # Mezclamos la lista interna
+    proxies = LISTA_PROXIES
+    random.shuffle(proxies)
 
     async with async_playwright() as p:
-        # Probaremos con 10 proxies diferentes para asegurar que uno pase
-        for i in range(10):
-            proxy_actual = random.choice(ips)
+        # Probaremos con los proxies de la lista
+        for i, proxy_actual in enumerate(proxies[:5]):
             print(f"\n--- Intento {i+1} - Usando Proxy: {proxy_actual} ---")
             
             try:
@@ -70,17 +60,19 @@ async def main():
                     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
                 )
                 page = await context.new_page()
-                page.set_default_timeout(45000) # 45 seg de espera por proxy lento
 
-                with open("links.txt", "r") as f:
-                    links = [l.strip() for l in f if l.strip()]
+                try:
+                    with open("links.txt", "r") as f:
+                        links = [l.strip() for l in f if l.strip()]
+                except:
+                    links = ["https://ouo.io"]
 
                 for link in links:
                     await saltar_ouo(page, link)
                 
                 await browser.close()
-            except:
-                print(f"[!] El proxy {proxy_actual} falló o es muy lento. Saltando...")
+            except Exception as e:
+                print(f"[!] Fallo con proxy {proxy_actual}")
                 continue
 
 if __name__ == "__main__":
