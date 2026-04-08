@@ -2,23 +2,25 @@ import asyncio
 from playwright.async_api import async_playwright
 import random
 import time
+import os
 
 # --- REEMPLAZA CON TUS PROXIES FRESCOS ---
 LISTA_PROXIES = [
+    "152.32.190.98:3128", 
     "185.76.240.21:10001",
-    "152.32.190.98:3128",
     "182.53.202.208:8080",
-    "129.226.81.110:7890",
-    "194.102.38.53:80"
+    "194.102.38.53:80",
+    "129.226.81.110:7890"
 ]
 
 async def saltar_ouo(page, url):
     print(f"[*] Iniciando cadena: {url}")
     try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        # Cargamos tu link real
+        await page.goto(url, wait_until="domcontentloaded", timeout=90000)
         
         for i in range(25):
-            await asyncio.sleep(12)
+            await asyncio.sleep(15)
             url_actual = page.url
             print(f"[*] Paso {i+1} - URL: {url_actual}")
 
@@ -27,32 +29,27 @@ async def saltar_ouo(page, url):
                 print("[!!!] ¡EXITO TOTAL! Llegamos a Hotmart.")
                 return True
 
-            # 2. TRUCO DEL BOTON ATRÁS (BACK) SI CAE EN PRESS
+            # 2. SI CAE EN LA TRAMPA DE PRESS, VOLVER ATRÁS
             if "ouo.press" in url_actual:
-                print("[!] Detectado ouo.press (vía muerta). Volviendo atrás...")
+                print("[!] Detectado ouo.press. Volviendo atrás...")
                 await page.go_back()
-                await asyncio.sleep(5)
                 continue
 
             try:
-                # 3. INTENTAR CLIC EN BOTÓN PRINCIPAL
+                # 3. BUSCAR BOTÓN PRINCIPAL
                 btn = await page.query_selector("#btn-main")
                 if btn:
                     print("[+] Clic en btn-main detectado")
                     await page.evaluate("document.getElementById('btn-main').click();")
                     continue
 
-                # 4. INTENTAR ENVIAR FORMULARIO (CAPTCHA/GO)
+                # 4. ENVIAR FORMULARIO (CAPTCHA/GO)
                 form = await page.query_selector("form[id*='captcha'], form[id*='go']")
                 if form:
                     print("[+] Enviando formulario interno")
                     await page.evaluate("document.querySelector('form[id*=\"captcha\"], form[id*=\"go\"]').submit();")
                     continue
 
-                # 5. SI NADA DE LO ANTERIOR FUNCIONA, REFRESCAR (F5)
-                if i > 5 and "ouo" in url_actual:
-                    print("[?] Atrapado. Refrescando página...")
-                    await page.reload()
             except:
                 pass
                 
@@ -60,12 +57,14 @@ async def saltar_ouo(page, url):
         print(f"[!] Error de navegación: {e}")
 
 async def main():
+    # Mezclamos tus proxies
     proxies = LISTA_PROXIES
     random.shuffle(proxies)
 
     async with async_playwright() as p:
         for i, proxy_actual in enumerate(proxies):
             print(f"\n--- Intento {i+1} - Proxy: {proxy_actual} ---")
+            
             try:
                 browser = await p.chromium.launch(
                     headless=True, 
@@ -76,12 +75,19 @@ async def main():
                 )
                 page = await context.new_page()
                 
-                # Tu link principal
-                await saltar_ouo(page, "https://ouo.io")
+                # --- LEER TU LINK REAL DEL ARCHIVO ---
+                enlace_para_bot = ""
+                if os.path.exists("links.txt"):
+                    with open("links.txt", "r") as f:
+                        enlace_para_bot = f.readline().strip()
                 
+                # Si por alguna razón falla el archivo, usa este de respaldo (TU LINK)
+                if not enlace_para_bot:
+                    enlace_para_bot = "https://ouo.io"
+
+                await saltar_ouo(page, enlace_para_bot)
                 await browser.close()
             except:
-                # Si el proxy falla la conexión inicial, saltamos al siguiente
                 continue
 
 if __name__ == "__main__":
