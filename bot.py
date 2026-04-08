@@ -2,68 +2,74 @@ import asyncio
 from playwright.async_api import async_playwright
 import random
 import time
-import os
+import requests
+import re
 
-# --- REEMPLAZA CON TUS PROXIES FRESCOS ---
-LISTA_PROXIES = [
-    "152.32.190.98:3128", 
-    "185.76.240.21:10001",
-    "182.53.202.208:8080",
-    "194.102.38.53:80",
-    "129.226.81.110:7890"
-]
+def extraer_proxies_directos():
+    print("[*] Extrayendo IPs frescas de fuentes públicas...")
+    # Usamos fuentes que entregan el texto limpio para no fallar en GitHub
+    urls = [
+        "https://proxyscrape.com",
+        "https://proxy-list.download",
+        "https://githubusercontent.com"
+    ]
+    ips_encontradas = []
+    for url in urls:
+        try:
+            r = requests.get(url, timeout=10)
+            # Buscamos el patrón IP:PUERTO
+            ips = re.findall(r'\d+\.\d+\.\d+\.\d+:\d+', r.text)
+            ips_encontradas.extend(ips)
+        except: continue
+    
+    # Eliminamos duplicados y mezclamos
+    return list(set(ips_encontradas))
 
 async def saltar_ouo(page, url):
-    print(f"[*] Iniciando cadena: {url}")
+    print(f"[*] Navegando a: {url}")
     try:
-        # Cargamos tu link real
-        await page.goto(url, wait_until="domcontentloaded", timeout=90000)
+        await page.goto(url, wait_until="domcontentloaded", timeout=45000)
         
         for i in range(25):
             await asyncio.sleep(15)
             url_actual = page.url
             print(f"[*] Paso {i+1} - URL: {url_actual}")
 
-            # 1. SI LLEGAMOS AL DESTINO FINAL
             if "hotmart" in url_actual:
-                print("[!!!] ¡EXITO TOTAL! Llegamos a Hotmart.")
+                print("[!!!] ¡VISTA COMPLETADA! Llegamos a Hotmart.")
                 return True
 
-            # 2. SI CAE EN LA TRAMPA DE PRESS, VOLVER ATRÁS
             if "ouo.press" in url_actual:
-                print("[!] Detectado ouo.press. Volviendo atrás...")
+                print("[!] Detectado ouo.press. Aplicando truco de volver atrás...")
                 await page.go_back()
                 continue
 
             try:
-                # 3. BUSCAR BOTÓN PRINCIPAL
-                btn = await page.query_selector("#btn-main")
-                if btn:
-                    print("[+] Clic en btn-main detectado")
+                # Intentar Clic o Submit según lo que aparezca
+                if await page.query_selector("#btn-main"):
                     await page.evaluate("document.getElementById('btn-main').click();")
-                    continue
-
-                # 4. ENVIAR FORMULARIO (CAPTCHA/GO)
-                form = await page.query_selector("form[id*='captcha'], form[id*='go']")
-                if form:
-                    print("[+] Enviando formulario interno")
+                    print("[+] Clic en botón")
+                elif await page.query_selector("form[id*='captcha'], form[id*='go']"):
                     await page.evaluate("document.querySelector('form[id*=\"captcha\"], form[id*=\"go\"]').submit();")
-                    continue
-
-            except:
-                pass
-                
-    except Exception as e:
-        print(f"[!] Error de navegación: {e}")
+                    print("[+] Formulario enviado")
+            except: pass
+    except:
+        print("[!] Tiempo agotado para este proxy.")
 
 async def main():
-    # Mezclamos tus proxies
-    proxies = LISTA_PROXIES
+    # El bot busca sus propias IPs al empezar
+    proxies = extraer_proxies_directos()
+    if not proxies:
+        print("[X] No se hallaron proxies. Usando IPs de respaldo...")
+        proxies = ["152.32.190.98:3128", "185.76.240.21:10001"]
+
     random.shuffle(proxies)
 
     async with async_playwright() as p:
-        for i, proxy_actual in enumerate(proxies):
-            print(f"\n--- Intento {i+1} - Proxy: {proxy_actual} ---")
+        # Probaremos con 20 proxies frescos en cada ejecución
+        for i in range(20):
+            proxy_actual = proxies[i]
+            print(f"\n--- Intento {i+1} - IP: {proxy_actual} ---")
             
             try:
                 browser = await p.chromium.launch(
@@ -75,20 +81,11 @@ async def main():
                 )
                 page = await context.new_page()
                 
-                # --- LEER TU LINK REAL DEL ARCHIVO ---
-                enlace_para_bot = ""
-                if os.path.exists("links.txt"):
-                    with open("links.txt", "r") as f:
-                        enlace_para_bot = f.readline().strip()
+                # TU LINK
+                await saltar_ouo(page, "https://ouo.io")
                 
-                # Si por alguna razón falla el archivo, usa este de respaldo (TU LINK)
-                if not enlace_para_bot:
-                    enlace_para_bot = "https://ouo.io"
-
-                await saltar_ouo(page, enlace_para_bot)
                 await browser.close()
-            except:
-                continue
+            except: continue
 
 if __name__ == "__main__":
     asyncio.run(main())
