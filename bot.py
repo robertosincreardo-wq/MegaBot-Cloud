@@ -6,71 +6,76 @@ import time
 import random
 import requests
 
-def obtener_proxy_valido():
-    print("[*] Buscando IP residencial gratuita...")
-    # Usamos una fuente de SOCKS5 que suelen ser más limpios
-    fuentes = [
-        "https://proxyscrape.com",
-        "https://proxy-list.download"
-    ]
+def obtener_proxy():
+    print("[*] Buscando IP...")
     try:
-        r = requests.get(random.choice(fuentes), timeout=10)
-        proxies = [p.strip() for p in r.text.splitlines() if "." in p]
-        return random.choice(proxies)
+        r = requests.get("https://proxyscrape.com", timeout=5)
+        return random.choice(r.text.splitlines())
     except:
         return None
 
-def saltar_acortador(driver, url_inicial):
-    wait = WebDriverWait(driver, 25)
-    for i in range(7): # Subimos a 7 capas por si hay redirecciones largas
-        time.sleep(random.randint(10, 15))
-        url_actual = driver.current_url
-        print(f"[*] Capa {i+1} - URL: {url_actual}")
+def saltar(driver):
+    wait = WebDriverWait(driver, 15)
+    for i in range(5):
+        time.sleep(10) # Tiempo para que cargue la publicidad
+        print(f"[*] Capa {i+1} - URL: {driver.current_url}")
 
-        if "youtube.com" in url_actual or "youtu.be" in url_actual:
-            print("[!!!] ¡EXITO TOTAL! Llegamos a YouTube.")
+        if "youtube.com" in driver.current_url:
+            print("[!!!] ¡EXITO!")
             return True
 
-        # Si después de 2 clics la URL sigue siendo la misma, el proxy está quemado
-        if i >= 2 and url_actual == url_inicial:
-            print("[X] Bucle detectado (IP Bloqueada). Abortando este intento.")
+        # Verificar si hay CAPTCHA bloqueando
+        if "captcha" in driver.page_source.lower():
+            print("[X] Captcha detectado. IP bloqueada.")
             return False
 
         try:
-            # Buscamos el botón de forma más agresiva
-            boton = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "button#btn-main, .btn-primary, button[type='submit'], #invisibleCaptchaShortlink")))
-            driver.execute_script("arguments.scrollIntoView();", boton)
-            time.sleep(2)
-            driver.execute_script("arguments.click();", boton)
-            print(f"[+] Clic enviado.")
-        except:
-            print("[?] Intentando clic forzado en cualquier botón disponible...")
-            driver.execute_script("document.querySelector('button').click();")
+            # BUSQUEDA MULTIPLE DE BOTONES (Ouo y Shink)
+            selectores = [
+                "button#btn-main", ".btn-primary", "button[type='submit']", 
+                "a.btn", "button", "#invisibleCaptchaShortlink"
+            ]
+            
+            encontrado = False
+            for selector in selectores:
+                try:
+                    boton = driver.find_element(By.CSS_SELECTOR, selector)
+                    if boton.is_displayed():
+                        driver.execute_script("arguments[0].click();", boton)
+                        print(f"[+] Clic en {selector}")
+                        encontrado = True
+                        break
+                except:
+                    continue
+            
+            if not encontrado:
+                print("[-] No se hallaron botones de salto.")
+                break
 
+        except Exception as e:
+            print(f"[-] Error: {e}")
+            break
     return False
 
 if __name__ == "__main__":
     with open("links.txt", "r") as f:
-        enlaces = [l.strip() for l in f if l.strip()]
+        links = [l.strip() for l in f if l.strip()]
 
-    for url in enlaces:
-        print(f"\n--- Iniciando Cadena: {url} ---")
-        proxy = obtener_proxy_valido()
-        
-        options = uc.ChromeOptions()
-        options.add_argument('--headless')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
+    for url in links:
+        print(f"\n--- Link: {url} ---")
+        proxy = obtener_proxy()
+        opts = uc.ChromeOptions()
+        opts.add_argument('--headless')
+        opts.add_argument('--no-sandbox')
         if proxy:
-            print(f"[!] Usando Proxy SOCKS5: {proxy}")
-            options.add_argument(f'--proxy-server=socks5://{proxy}')
+            print(f"[!] Usando Proxy: {proxy}")
+            opts.add_argument(f'--proxy-server={proxy}')
 
         try:
-            driver = uc.Chrome(options=options, version_main=146)
+            driver = uc.Chrome(options=opts, version_main=146)
             driver.get(url)
-            saltar_acortador(driver, url)
-        except Exception as e:
-            print(f"[-] Error de conexión: {e}")
-        finally:
-            try: driver.quit()
-            except: pass
+            saltar(driver)
+            driver.quit()
+        except:
+            print("[X] Error de carga")
+            if 'driver' in locals(): driver.quit()
