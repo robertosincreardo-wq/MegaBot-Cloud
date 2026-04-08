@@ -6,10 +6,13 @@ import time
 # LISTA DE PROXIES HARDCODED (Para que no dependa de internet para bajarlos)
 # Estos son proxies publicos que rotan mucho, si fallan los cambiaremos.
 LISTA_PROXIES = [
-    "167.94.138.42:80", "167.94.145.106:80", "167.94.139.117:80",
-    "167.94.146.46:80", "206.189.155.145:80", "159.203.81.164:80",
-    "165.227.223.111:80", "138.197.148.215:80", "167.71.201.21:80"
+    "194.102.38.53:80",
+    "129.226.81.110:7890",
+    "182.53.202.208:8080",
+    "152.32.190.98:3128",
+    "185.76.240.21:10001"
 ]
+
 
 async def saltar_ouo(page, url):
     print(f"[*] Iniciando: {url}")
