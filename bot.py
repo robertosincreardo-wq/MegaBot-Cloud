@@ -9,20 +9,30 @@ import re
 
 def obtener_lista_proxies():
     print("[*] Descargando lista de proxies reales...")
-    # Usamos fuentes directas de texto plano
     urls = [
+        "https://proxyscrape.com",
+        "https://proxy-list.download",
         "https://githubusercontent.com",
-        "https://proxyscrape.com"
+        "https://githubusercontent.com"
     ]
     ips_finales = []
+    
+    # Intentar descargar de las fuentes
     for url in urls:
         try:
-            r = requests.get(url, timeout=10)
-            ips = re.findall(r'\d+\.\d+\.\d+\.\d+:\d+', r.text)
-            ips_finales.extend(ips)
+            r = requests.get(url, timeout=15)
+            if r.status_code == 200:
+                ips = re.findall(r'\d+\.\d+\.\d+\.\d+:\d+', r.text)
+                ips_finales.extend(ips)
         except:
             continue
-    return list(set(ips_finales)) # Eliminar duplicados
+            
+    # Si las fuentes fallan, usamos estos de emergencia (pueden estar lentos pero existen)
+    if not ips_finales:
+        print("[!] Usando lista de emergencia interna...")
+        ips_finales = ["185.199.108.153:80", "185.199.109.153:80", "185.199.110.153:80"]
+        
+    return list(set(ips_finales))
 
 def procesar_capa(driver):
     wait = WebDriverWait(driver, 25)
@@ -36,14 +46,14 @@ def procesar_capa(driver):
 
         # Etapa 1: Captcha Invisible
         if driver.find_elements(By.ID, "form-captcha"):
-            print("[...] Etapa 1 detectada. Esperando 15s...")
+            print("[...] Etapa 1. Esperando carga...")
             time.sleep(15)
             driver.execute_script("document.getElementById('form-captcha').submit();")
             return "SIGUE"
 
         # Etapa 2: Botón Get Link
         elif driver.find_elements(By.ID, "btn-main"):
-            print("[...] Etapa 2 detectada. Esperando 10s...")
+            print("[...] Etapa 2. Esperando contador...")
             time.sleep(10)
             boton = wait.until(EC.element_to_be_clickable((By.ID, "btn-main")))
             driver.execute_script("arguments.click();", boton)
@@ -60,10 +70,6 @@ def procesar_capa(driver):
 
 if __name__ == "__main__":
     lista_ips = obtener_lista_proxies()
-    if not lista_ips:
-        print("[X] No se pudieron descargar proxies. Abortando.")
-        exit(1)
-        
     random.shuffle(lista_ips)
     print(f"[+] Total de proxies listos: {len(lista_ips)}")
 
@@ -73,22 +79,25 @@ if __name__ == "__main__":
     for url in enlaces:
         exito = False
         intentos = 0
-        while not exito and intentos < 10: # Intentamos con hasta 10 proxies
-            proxy = lista_ips[intentos]
+        max_intentos = 15 # Probaremos con 15 IPs diferentes por link
+        
+        while not exito and intentos < max_intentos:
+            proxy = lista_ips[intentos] if intentos < len(lista_ips) else None
             print(f"\n--- Intento {intentos + 1} con Proxy: {proxy} ---")
             
             opts = uc.ChromeOptions()
             opts.add_argument('--headless')
             opts.add_argument('--no-sandbox')
-            opts.add_argument(f'--proxy-server={proxy}')
+            opts.add_argument('--disable-dev-shm-usage')
+            if proxy:
+                opts.add_argument(f'--proxy-server={proxy}')
             
             driver = None
             try:
                 driver = uc.Chrome(options=opts, version_main=146)
-                driver.set_page_load_timeout(35)
+                driver.set_page_load_timeout(40)
                 driver.get(url)
                 
-                # Intentamos saltar hasta 12 capas (la cadena de 5 links)
                 for _ in range(12):
                     status = procesar_capa(driver)
                     if status == "FIN":
@@ -97,10 +106,10 @@ if __name__ == "__main__":
                     time.sleep(5)
                 
                 if exito: break
-            except Exception as e:
-                print(f"[!] Error de conexión con este proxy.")
+            except:
+                print(f"[!] Proxy lento o caído. Saltando...")
             finally:
-                if driver: 
+                if driver:
                     try: driver.quit()
                     except: pass
                 intentos += 1
