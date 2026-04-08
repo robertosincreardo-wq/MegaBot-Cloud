@@ -3,25 +3,24 @@ from playwright.async_api import async_playwright
 import random
 import time
 
-# LISTA DE PROXIES HARDCODED (Para que no dependa de internet para bajarlos)
-# Estos son proxies publicos que rotan mucho, si fallan los cambiaremos.
+# Usa proxies frescos. El 152.32.190.98 del Intento 4 fue el mejor.
 LISTA_PROXIES = [
-    "194.102.38.53:80",
-    "129.226.81.110:7890",
-    "182.53.202.208:8080",
-    "152.32.190.98:3128",
-    "185.76.240.21:10001"
+    "152.32.190.98:3128", 
+    "43.159.28.153:23531",
+    "152.32.148.118:3128",
+    "103.155.22.210:3128",
+    "159.89.49.172:3128"
 ]
-
 
 async def saltar_ouo(page, url):
     print(f"[*] Iniciando: {url}")
     try:
-        # Cargamos la página con un tiempo de espera largo
-        await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        # Esperar a que cargue la página inicial
+        await page.goto(url, wait_until="load", timeout=90000)
         
-        for i in range(12):
-            await asyncio.sleep(12)
+        # Intentaremos hasta 20 veces para cubrir las 5 capas de tu cadena
+        for i in range(20):
+            await asyncio.sleep(12) # Espera obligatoria para el contador de Ouo
             url_actual = page.url
             print(f"[*] Capa {i+1} - URL: {url_actual}")
 
@@ -29,53 +28,48 @@ async def saltar_ouo(page, url):
                 print("[!!!] ¡EXITO TOTAL! Llegamos a Hotmart.")
                 return True
 
+            # LÓGICA DE CLIC SEGÚN LA PÁGINA
             try:
-                # 1. Enviar el formulario invisible (Etapa 1)
-                await page.evaluate("if(document.getElementById('form-captcha')) document.getElementById('form-captcha').submit();")
+                # Si estamos en la etapa de "Get Link" (URL contiene /go/ o /xreallcygo/)
+                if "/go/" in url_actual or "/xreallcygo/" in url_actual or await page.query_selector("#btn-main"):
+                    print("[+] Detectado botón 'Get Link'. Cliqueando...")
+                    # Forzamos el clic varias veces para asegurar
+                    await page.evaluate("document.getElementById('btn-main').click();")
+                    await asyncio.sleep(2)
                 
-                # 2. Click en el botón físico (Etapa 2)
-                boton = await page.query_selector("#btn-main")
-                if boton:
-                    await boton.click()
-                    print("[+] Clic en Get Link enviado.")
+                # Si estamos en la etapa de Captcha (form-captcha)
+                elif await page.query_selector("#form-captcha"):
+                    print("[+] Detectada etapa de Captcha. Enviando formulario...")
+                    await page.evaluate("document.getElementById('form-captcha').submit();")
+                
+                else:
+                    # Si no ve nada, intenta cliquear el botón principal por si acaso
+                    print("[?] Intentando clic de emergencia...")
+                    await page.evaluate("if(document.getElementById('btn-main')) document.getElementById('btn-main').click();")
             except:
                 pass
                 
     except Exception as e:
-        print(f"[X] Error en navegación: {e}")
+        print(f"[!] Error: {e}")
 
 async def main():
-    # Mezclamos la lista interna
     proxies = LISTA_PROXIES
     random.shuffle(proxies)
 
     async with async_playwright() as p:
-        # Probaremos con los proxies de la lista
         for i, proxy_actual in enumerate(proxies[:5]):
-            print(f"\n--- Intento {i+1} - Usando Proxy: {proxy_actual} ---")
-            
+            print(f"\n--- Intento {i+1} - Proxy: {proxy_actual} ---")
             try:
-                browser = await p.chromium.launch(
-                    headless=True, 
-                    proxy={'server': f'http://{proxy_actual}'}
-                )
-                context = await browser.new_context(
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-                )
+                # Iniciamos navegador con el proxy
+                browser = await p.chromium.launch(headless=True, proxy={'server': f'http://{proxy_actual}'})
+                context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
                 page = await context.new_page()
 
-                try:
-                    with open("links.txt", "r") as f:
-                        links = [l.strip() for l in f if l.strip()]
-                except:
-                    links = ["https://ouo.io"]
-
-                for link in links:
-                    await saltar_ouo(page, link)
+                # Tu link principal
+                await saltar_ouo(page, "https://ouo.io/8KpMim")
                 
                 await browser.close()
-            except Exception as e:
-                print(f"[!] Fallo con proxy {proxy_actual}")
+            except:
                 continue
 
 if __name__ == "__main__":
