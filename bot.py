@@ -3,7 +3,7 @@ from playwright.async_api import async_playwright
 import random
 import time
 
-# --- MANTÉN TUS PROXIES AQUÍ ---
+# --- REEMPLAZA CON TUS PROXIES FRESCOS ---
 LISTA_PROXIES = [
     "185.76.240.21:10001",
     "152.32.190.98:3128",
@@ -18,55 +18,46 @@ async def saltar_ouo(page, url):
         await page.goto(url, wait_until="domcontentloaded", timeout=60000)
         
         for i in range(25):
-            await asyncio.sleep(15)
+            await asyncio.sleep(12)
             url_actual = page.url
             print(f"[*] Paso {i+1} - URL: {url_actual}")
 
+            # 1. SI LLEGAMOS AL DESTINO FINAL
             if "hotmart" in url_actual:
                 print("[!!!] ¡EXITO TOTAL! Llegamos a Hotmart.")
                 return True
 
+            # 2. TRUCO DEL BOTON ATRÁS (BACK) SI CAE EN PRESS
+            if "ouo.press" in url_actual:
+                print("[!] Detectado ouo.press (vía muerta). Volviendo atrás...")
+                await page.go_back()
+                await asyncio.sleep(5)
+                continue
+
             try:
-                # 1. SI ESTAMOS EN OUO.PRESS (Página de dominio/tránsito)
-                if "ouo.press" in url_actual:
-                    print("[>] Detectado ouo.press. Forzando salto de dominio...")
-                    # Intentamos enviar cualquier formulario que esté en esa página
-                    await page.evaluate("""
-                        let f = document.querySelector('form');
-                        if(f) f.submit();
-                    """)
-                
-                # 2. BUSCAR BOTÓN PRINCIPAL (btn-main)
+                # 3. INTENTAR CLIC EN BOTÓN PRINCIPAL
                 btn = await page.query_selector("#btn-main")
                 if btn:
                     print("[+] Clic en btn-main detectado")
                     await page.evaluate("document.getElementById('btn-main').click();")
                     continue
 
-                # 3. BUSCAR FORMULARIOS DE CAPTCHA O "GO"
-                form = await page.query_selector("form[id*='captcha'], form[id*='go'], form[action*='go']")
+                # 4. INTENTAR ENVIAR FORMULARIO (CAPTCHA/GO)
+                form = await page.query_selector("form[id*='captcha'], form[id*='go']")
                 if form:
-                    print("[+] Enviando formulario de redirección")
-                    await page.evaluate("""
-                        let f = document.querySelector('form[id*="captcha"], form[id*="go"], form[action*="go"]');
-                        f.submit();
-                    """)
+                    print("[+] Enviando formulario interno")
+                    await page.evaluate("document.querySelector('form[id*=\"captcha\"], form[id*=\"go\"]').submit();")
                     continue
 
-                # 4. CLIC DE EMERGENCIA
-                await page.evaluate("""
-                    document.querySelectorAll('button, a.btn').forEach(b => {
-                        let txt = b.innerText.toLowerCase();
-                        if(txt.includes('human') || txt.includes('get') || txt.includes('click') || b.id === 'btn-main') {
-                            b.click();
-                        }
-                    });
-                """)
+                # 5. SI NADA DE LO ANTERIOR FUNCIONA, REFRESCAR (F5)
+                if i > 5 and "ouo" in url_actual:
+                    print("[?] Atrapado. Refrescando página...")
+                    await page.reload()
             except:
                 pass
                 
     except Exception as e:
-        print(f"[!] Error: {e}")
+        print(f"[!] Error de navegación: {e}")
 
 async def main():
     proxies = LISTA_PROXIES
@@ -84,10 +75,13 @@ async def main():
                     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
                 )
                 page = await context.new_page()
+                
                 # Tu link principal
                 await saltar_ouo(page, "https://ouo.io")
+                
                 await browser.close()
             except:
+                # Si el proxy falla la conexión inicial, saltamos al siguiente
                 continue
 
 if __name__ == "__main__":
