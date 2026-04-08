@@ -1,115 +1,65 @@
-import undetected_chromedriver as uc
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-import time
+import asyncio
+from playwright.async_api import async_playwright
 import random
 import requests
 import re
 
-def obtener_lista_proxies():
-    print("[*] Descargando lista de proxies reales...")
-    urls = [
-        "https://proxyscrape.com",
-        "https://proxy-list.download",
-        "https://githubusercontent.com",
-        "https://githubusercontent.com"
-    ]
-    ips_finales = []
-    
-    # Intentar descargar de las fuentes
-    for url in urls:
-        try:
-            r = requests.get(url, timeout=15)
-            if r.status_code == 200:
-                ips = re.findall(r'\d+\.\d+\.\d+\.\d+:\d+', r.text)
-                ips_finales.extend(ips)
-        except:
-            continue
-            
-    # Si las fuentes fallan, usamos estos de emergencia (pueden estar lentos pero existen)
-    if not ips_finales:
-        print("[!] Usando lista de emergencia interna...")
-        ips_finales = ["185.199.108.153:80", "185.199.109.153:80", "185.199.110.153:80"]
-        
-    return list(set(ips_finales))
-
-def procesar_capa(driver):
-    wait = WebDriverWait(driver, 25)
+async def obtener_proxy():
     try:
-        url_actual = driver.current_url
-        print(f"[*] URL: {url_actual}")
+        r = requests.get("https://proxyscrape.com", timeout=5)
+        ips = re.findall(r'\d+\.\d+\.\d+\.\d+:\d+', r.text)
+        return random.choice(ips) if ips else None
+    except: return None
 
-        if "hotmart.com" in url_actual:
+async def saltar_ouo(page, url):
+    print(f"[*] Navegando a: {url}")
+    await page.goto(url, wait_until="networkidle", timeout=60000)
+    
+    for i in range(12): # Capas de la cadena
+        print(f"[*] Capa {i+1} - URL: {page.url}")
+        if "hotmart.com" in page.url:
             print("[!!!] ¡EXITO EN HOTMART!")
-            return "FIN"
+            return True
 
-        # Etapa 1: Captcha Invisible
-        if driver.find_elements(By.ID, "form-captcha"):
-            print("[...] Etapa 1. Esperando carga...")
-            time.sleep(15)
-            driver.execute_script("document.getElementById('form-captcha').submit();")
-            return "SIGUE"
+        # ESPERA ACTIVA: Esperamos a que el botón aparezca en el DOM
+        try:
+            # Buscamos botones de Ouo (btn-main) o Shink
+            boton = await page.wait_for_selector("#btn-main, button, .btn-primary", timeout=15000)
+            
+            # Simulamos pensamiento humano
+            await asyncio.sleep(random.randint(10, 15))
+            
+            # Click real simulando mouse
+            await boton.click()
+            print(f"[+] Click realizado en capa {i+1}")
+        except:
+            print("[-] Botón no apareció. Reintentando carga...")
+            await page.reload()
+    return False
 
-        # Etapa 2: Botón Get Link
-        elif driver.find_elements(By.ID, "btn-main"):
-            print("[...] Etapa 2. Esperando contador...")
-            time.sleep(10)
-            boton = wait.until(EC.element_to_be_clickable((By.ID, "btn-main")))
-            driver.execute_script("arguments.click();", boton)
-            return "SIGUE"
-        
-        else:
-            print("[-] Sin botones. Reintentando...")
-            driver.refresh()
-            time.sleep(8)
-            return "SIGUE"
-    except Exception as e:
-        print(f"[-] Error en capa: {e}")
-        return "ERROR"
+async def main():
+    async with async_playwright() as p:
+        proxy_ip = await obtener_proxy()
+        browser_args = {}
+        if proxy_ip:
+            print(f"[!] Usando Proxy: {proxy_ip}")
+            browser_args['proxy'] = {'server': f'http://{proxy_ip}'}
+
+        browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+            viewport={'width': 1920, 'height': 1080}
+        )
+        page = await context.new_page()
+
+        with open("links.txt", "r") as f:
+            links = [l.strip() for l in f if l.strip()]
+
+        for link in links:
+            await saltar_ouo(page, link)
+            await asyncio.sleep(5)
+
+        await browser.close()
 
 if __name__ == "__main__":
-    lista_ips = obtener_lista_proxies()
-    random.shuffle(lista_ips)
-    print(f"[+] Total de proxies listos: {len(lista_ips)}")
-
-    with open("links.txt", "r") as f:
-        enlaces = [l.strip() for l in f if l.strip()]
-
-    for url in enlaces:
-        exito = False
-        intentos = 0
-        max_intentos = 15 # Probaremos con 15 IPs diferentes por link
-        
-        while not exito and intentos < max_intentos:
-            proxy = lista_ips[intentos] if intentos < len(lista_ips) else None
-            print(f"\n--- Intento {intentos + 1} con Proxy: {proxy} ---")
-            
-            opts = uc.ChromeOptions()
-            opts.add_argument('--headless')
-            opts.add_argument('--no-sandbox')
-            opts.add_argument('--disable-dev-shm-usage')
-            if proxy:
-                opts.add_argument(f'--proxy-server={proxy}')
-            
-            driver = None
-            try:
-                driver = uc.Chrome(options=opts, version_main=146)
-                driver.set_page_load_timeout(40)
-                driver.get(url)
-                
-                for _ in range(12):
-                    status = procesar_capa(driver)
-                    if status == "FIN":
-                        exito = True
-                        break
-                    time.sleep(5)
-                
-                if exito: break
-            except:
-                print(f"[!] Proxy lento o caído. Saltando...")
-            finally:
-                if driver:
-                    try: driver.quit()
-                    except: pass
-                intentos += 1
+    asyncio.run(main())
