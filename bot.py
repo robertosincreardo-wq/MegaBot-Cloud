@@ -3,73 +3,93 @@ from playwright.async_api import async_playwright
 import random
 import time
 
-# Usa proxies frescos. El 152.32.190.98 del Intento 4 fue el mejor.
+# --- PEGA TUS PROXIES AQUÍ ---
 LISTA_PROXIES = [
-    "152.32.190.98:3128", 
-    "43.159.28.153:23531",
-    "152.32.148.118:3128",
-    "103.155.22.210:3128",
-    "159.89.49.172:3128"
+    "194.102.38.53:80",
+    "129.226.81.110:7890",
+    "182.53.202.208:8080",
+    "152.32.190.98:3128",
+    "185.76.240.21:10001"
 ]
 
 async def saltar_ouo(page, url):
-    print(f"[*] Iniciando: {url}")
+    print(f"[*] Iniciando cadena: {url}")
     try:
-        # Esperar a que cargue la página inicial
+        # Tiempo de espera largo para la carga inicial
         await page.goto(url, wait_until="load", timeout=90000)
         
-        # Intentaremos hasta 20 veces para cubrir las 5 capas de tu cadena
-        for i in range(20):
-            await asyncio.sleep(12) # Espera obligatoria para el contador de Ouo
+        # 25 intentos para asegurar que pase los 5 acortadores (2 clics por cada uno + margen)
+        for i in range(25):
+            await asyncio.sleep(15) # Ouo requiere que el contador llegue a 0
             url_actual = page.url
-            print(f"[*] Capa {i+1} - URL: {url_actual}")
+            print(f"[*] Paso {i+1} - URL: {url_actual}")
 
+            # Condición de éxito: Llegar a Hotmart
             if "hotmart" in url_actual:
-                print("[!!!] ¡EXITO TOTAL! Llegamos a Hotmart.")
+                print("[!!!] ¡ÉXITO TOTAL! Hemos llegado a Hotmart.")
                 return True
 
-            # LÓGICA DE CLIC SEGÚN LA PÁGINA
             try:
-                # Si estamos en la etapa de "Get Link" (URL contiene /go/ o /xreallcygo/)
-                if "/go/" in url_actual or "/xreallcygo/" in url_actual or await page.query_selector("#btn-main"):
-                    print("[+] Detectado botón 'Get Link'. Cliqueando...")
-                    # Forzamos el clic varias veces para asegurar
+                # Caso A: Etapa de "Get Link" (Botón btn-main)
+                # Usamos JavaScript para el clic porque es más efectivo contra bloqueos
+                btn_exists = await page.query_selector("#btn-main")
+                if btn_exists:
+                    print("[+] Detectado botón 'Get Link'. Ejecutando clic...")
                     await page.evaluate("document.getElementById('btn-main').click();")
-                    await asyncio.sleep(2)
-                
-                # Si estamos en la etapa de Captcha (form-captcha)
-                elif await page.query_selector("#form-captcha"):
+                    continue
+
+                # Caso B: Etapa de Captcha Invisible (form-captcha)
+                form_exists = await page.query_selector("#form-captcha")
+                if form_exists:
                     print("[+] Detectada etapa de Captcha. Enviando formulario...")
                     await page.evaluate("document.getElementById('form-captcha').submit();")
+                    continue
                 
-                else:
-                    # Si no ve nada, intenta cliquear el botón principal por si acaso
-                    print("[?] Intentando clic de emergencia...")
+                # Si no detecta nada pero sigue en Ouo, intentamos un clic de emergencia
+                if "ouo.io" in url_actual:
+                    print("[?] Reintentando forzar botones internos...")
                     await page.evaluate("if(document.getElementById('btn-main')) document.getElementById('btn-main').click();")
-            except:
+                    await page.evaluate("if(document.getElementById('form-captcha')) document.getElementById('form-captcha').submit();")
+
+            except Exception:
                 pass
                 
     except Exception as e:
-        print(f"[!] Error: {e}")
+        print(f"[!] Error de conexión o tiempo agotado: {e}")
 
 async def main():
+    # Mezclamos tus proxies para rotar
     proxies = LISTA_PROXIES
     random.shuffle(proxies)
 
     async with async_playwright() as p:
-        for i, proxy_actual in enumerate(proxies[:5]):
-            print(f"\n--- Intento {i+1} - Proxy: {proxy_actual} ---")
+        for i, proxy_actual in enumerate(proxies):
+            print(f"\n--- Intento {i+1} con tu Proxy: {proxy_actual} ---")
+            
             try:
-                # Iniciamos navegador con el proxy
-                browser = await p.chromium.launch(headless=True, proxy={'server': f'http://{proxy_actual}'})
-                context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+                # Lanzamos el navegador con tu proxy
+                browser = await p.chromium.launch(
+                    headless=True, 
+                    proxy={'server': f'http://{proxy_actual}'}
+                )
+                context = await browser.new_context(
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                )
                 page = await context.new_page()
 
-                # Tu link principal
-                await saltar_ouo(page, "https://ouo.io/8KpMim")
+                # Leemos tu link principal del archivo
+                try:
+                    with open("links.txt", "r") as f:
+                        links = [l.strip() for l in f if l.strip()]
+                except:
+                    links = ["https://ouo.io"]
+
+                for link in links:
+                    await saltar_ouo(page, link)
                 
                 await browser.close()
-            except:
+            except Exception as e:
+                print(f"[!] Falló la conexión con {proxy_actual}")
                 continue
 
 if __name__ == "__main__":
