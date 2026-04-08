@@ -16,10 +16,11 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Instalar Dependencias
+      - name: Instalar Dependencias y Navegadores
         run: |
           pip install playwright requests
-          npx playwright install chromium --with-deps
+          # Este comando es el que faltaba y es crítico:
+          python -m playwright install chromium --with-deps
 
       - name: Ejecutar Bot
         run: python bot.py
