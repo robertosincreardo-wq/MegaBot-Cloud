@@ -1,15 +1,14 @@
 name: BotAcortadores
 on:
+  workflow_dispatch: # Botón manual
   schedule:
-    - cron: '*/15 * * * *'  # Esto lo ejecutará 4 veces por hora
-  workflow_dispatch:
- # Se ejecuta solo cada 3 horas
+    - cron: '0 */3 * * *' # Cada 3 horas
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Descargar Código
         uses: actions/checkout@v3
 
       - name: Instalar Python
@@ -18,7 +17,9 @@ jobs:
           python-version: '3.10'
 
       - name: Instalar Dependencias
-        run: pip install -r requirements.txt
+        run: |
+          pip install playwright requests
+          npx playwright install chromium --with-deps
 
       - name: Ejecutar Bot
         run: python bot.py
