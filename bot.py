@@ -7,21 +7,15 @@ import random
 import requests
 import re
 
-def obtener_proxy_real():
-    print("[*] Buscando IP válida...")
-    fuente = "https://proxyscrape.com"
+def obtener_lista_proxies():
+    print("[*] Descargando lista de proxies frescos...")
+    url = "https://proxyscrape.com"
     try:
-        r = requests.get(fuente, timeout=10)
-        # Usamos una expresión regular para extraer solo IPs reales (formato 0.0.0.0:0000)
+        r = requests.get(url, timeout=15)
         ips = re.findall(r'\d+\.\d+\.\d+\.\d+:\d+', r.text)
-        if ips:
-            seleccionada = random.choice(ips)
-            print(f"[!] IP encontrada y validada: {seleccionada}")
-            return seleccionada
+        return ips
     except:
-        pass
-    print("[?] No se encontró proxy limpio, usando IP directa.")
-    return None
+        return []
 
 def procesar_capa(driver):
     wait = WebDriverWait(driver, 25)
@@ -30,26 +24,26 @@ def procesar_capa(driver):
         print(f"[*] URL: {url_actual}")
 
         if "hotmart.com" in url_actual:
-            print("[!!!] ¡EXITO TOTAL EN HOTMART!")
+            print("[!!!] EXITOSO EN HOTMART")
             return "FIN"
 
-        # Etapa 1: Captcha Invisible
+        # Etapa 1: Captcha Invisible (form-captcha)
         if driver.find_elements(By.ID, "form-captcha"):
-            print("[...] Etapa 1. Esperando 15s...")
+            print("[...] Etapa 1 detectada. Esperando 15s...")
             time.sleep(15)
             driver.execute_script("document.getElementById('form-captcha').submit();")
             return "SIGUE"
 
-        # Etapa 2: Botón Get Link
+        # Etapa 2: Botón Get Link (btn-main)
         elif driver.find_elements(By.ID, "btn-main"):
-            print("[...] Etapa 2. Esperando 10s...")
+            print("[...] Etapa 2 detectada. Esperando 10s...")
             time.sleep(10)
             boton = wait.until(EC.element_to_be_clickable((By.ID, "btn-main")))
             driver.execute_script("arguments.click();", boton)
             return "SIGUE"
         
         else:
-            print("[-] Sin botones. Reintentando...")
+            print("[-] No se ven botones. Reintentando...")
             driver.refresh()
             time.sleep(8)
             return "SIGUE"
@@ -58,33 +52,42 @@ def procesar_capa(driver):
         return "ERROR"
 
 if __name__ == "__main__":
-    proxy = obtener_proxy_real()
-    
-    options = uc.ChromeOptions()
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    
-    if proxy:
-        options.add_argument(f'--proxy-server={proxy}')
+    lista_ips = obtener_lista_proxies()
+    random.shuffle(lista_ips) # Mezclamos para no usar siempre los mismos
 
-    # Iniciar navegador con manejo de errores
-    try:
-        driver = uc.Chrome(options=options, version_main=146)
-    except:
-        # Si falla con proxy, iniciamos sin él
-        driver = uc.Chrome(options=options.remove_argument(f'--proxy-server={proxy}') if proxy else options, version_main=146)
+    with open("links.txt", "r") as f:
+        enlaces = [l.strip() for l in f if l.strip()]
 
-    try:
-        with open("links.txt", "r") as f:
-            enlaces = [l.strip() for l in f if l.strip()]
+    for url in enlaces:
+        exito = False
+        intentos_proxy = 0
         
-        for link in enlaces:
-            print(f"\n--- Iniciando: {link} ---")
-            driver.get(link)
-            for _ in range(12): # Para las 5 capas
-                status = procesar_capa(driver)
-                if status == "FIN": break
-                time.sleep(5)
-    finally:
-        driver.quit()
+        # Intentamos con hasta 5 proxies diferentes por cada link
+        while not exito and intentos_proxy < 5:
+            proxy = lista_ips[intentos_proxy] if intentos_proxy < len(lista_ips) else None
+            print(f"\n--- Intento {intentos_proxy + 1} con Proxy: {proxy} ---")
+            
+            opts = uc.ChromeOptions()
+            opts.add_argument('--headless')
+            opts.add_argument('--no-sandbox')
+            if proxy: opts.add_argument(f'--proxy-server={proxy}')
+            
+            driver = None
+            try:
+                driver = uc.Chrome(options=opts, version_main=146)
+                driver.set_page_load_timeout(30)
+                driver.get(url)
+                
+                for _ in range(12):
+                    status = procesar_capa(driver)
+                    if status == "FIN": 
+                        exito = True
+                        break
+                    time.sleep(5)
+                
+                if exito: break
+            except Exception as e:
+                print(f"[!] Error con este proxy: {e}")
+            finally:
+                if driver: driver.quit()
+                intentos_proxy += 1
