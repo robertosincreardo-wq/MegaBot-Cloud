@@ -2,33 +2,30 @@ import asyncio
 from playwright.async_api import async_playwright
 import random
 import time
-import requests
 import re
+import os
 
-def extraer_proxies_directos():
-    print("[*] Extrayendo IPs frescas de fuentes públicas...")
-    # Usamos fuentes que entregan el texto limpio para no fallar en GitHub
-    urls = [
-        "https://proxyscrape.com",
-        "https://proxy-list.download",
-        "https://githubusercontent.com"
-    ]
-    ips_encontradas = []
-    for url in urls:
-        try:
-            r = requests.get(url, timeout=10)
-            # Buscamos el patrón IP:PUERTO
-            ips = re.findall(r'\d+\.\d+\.\d+\.\d+:\d+', r.text)
-            ips_encontradas.extend(ips)
-        except: continue
-    
-    # Eliminamos duplicados y mezclamos
-    return list(set(ips_encontradas))
+def extraer_ips_locales():
+    print("[*] Leyendo IPs del archivo proxies.txt...")
+    try:
+        if os.path.exists("proxies.txt"):
+            with open("proxies.txt", "r") as f:
+                contenido = f.read()
+            # Esta línea limpia todo el texto basura y saca solo las IPs
+            ips = re.findall(r'\d+\.\d+\.\d+\.\d+:\d+', contenido)
+            print(f"[!] Se encontraron {len(ips)} IPs válidas en tu archivo.")
+            return ips
+    except Exception as e:
+        print(f"[X] Error leyendo proxies.txt: {e}")
+    return []
 
 async def saltar_ouo(page, url):
-    print(f"[*] Navegando a: {url}")
+    # CORRECCIÓN: Aseguramos que el link sea el tuyo completo
+    mi_enlace = "https://ouo.io" 
+    print(f"[*] Navegando a: {mi_enlace}")
+    
     try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+        await page.goto(mi_enlace, wait_until="domcontentloaded", timeout=45000)
         
         for i in range(25):
             await asyncio.sleep(15)
@@ -40,12 +37,12 @@ async def saltar_ouo(page, url):
                 return True
 
             if "ouo.press" in url_actual:
-                print("[!] Detectado ouo.press. Aplicando truco de volver atrás...")
+                print("[!] Detectado ouo.press. Volviendo atrás...")
                 await page.go_back()
                 continue
 
             try:
-                # Intentar Clic o Submit según lo que aparezca
+                # Intentar Clic o Submit
                 if await page.query_selector("#btn-main"):
                     await page.evaluate("document.getElementById('btn-main').click();")
                     print("[+] Clic en botón")
@@ -54,20 +51,21 @@ async def saltar_ouo(page, url):
                     print("[+] Formulario enviado")
             except: pass
     except:
-        print("[!] Tiempo agotado para este proxy.")
+        print("[!] Tiempo agotado o error de carga.")
 
 async def main():
-    # El bot busca sus propias IPs al empezar
-    proxies = extraer_proxies_directos()
+    proxies = extraer_ips_locales()
+    
     if not proxies:
-        print("[X] No se hallaron proxies. Usando IPs de respaldo...")
-        proxies = ["152.32.190.98:3128", "185.76.240.21:10001"]
+        print("[X] No hay proxies en proxies.txt. Abortando.")
+        return
 
     random.shuffle(proxies)
 
     async with async_playwright() as p:
-        # Probaremos con 20 proxies frescos en cada ejecución
-        for i in range(20):
+        # Probaremos con las IPs que encontraste (hasta 20)
+        max_intentos = min(len(proxies), 20)
+        for i in range(max_intentos):
             proxy_actual = proxies[i]
             print(f"\n--- Intento {i+1} - IP: {proxy_actual} ---")
             
@@ -81,11 +79,11 @@ async def main():
                 )
                 page = await context.new_page()
                 
-                # TU LINK
-                await saltar_ouo(page, "https://ouo.io")
-                
+                await saltar_ouo(page, "")
                 await browser.close()
-            except: continue
+            except: 
+                print("[!] Error de conexión con este proxy.")
+                continue
 
 if __name__ == "__main__":
     asyncio.run(main())
