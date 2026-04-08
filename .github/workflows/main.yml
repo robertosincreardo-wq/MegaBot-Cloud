@@ -1,8 +1,9 @@
 name: BotAcortadores
 on:
-  workflow_dispatch: # Botón manual
   schedule:
-    - cron: '0 */3 * * *' # Se ejecuta solo cada 3 horas
+    - cron: '*/15 * * * *'  # Esto lo ejecutará 4 veces por hora
+  workflow_dispatch:
+ # Se ejecuta solo cada 3 horas
 
 jobs:
   run-bot:
