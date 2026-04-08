@@ -3,37 +3,77 @@ from playwright.async_api import async_playwright
 import random
 import time
 
-# --- PEGA TUS PROXIES AQUÍ ---
+# --- MANTÉN TUS PROXIES AQUÍ ---
 LISTA_PROXIES = [
-    "194.102.38.53:80",
-    "129.226.81.110:7890",
-    "182.53.202.208:8080",
+    "185.76.240.21:10001", # El que funcionó
     "152.32.190.98:3128",
-    "185.76.240.21:10001"
+    " 207.180.254.198:8080",
+    "197.221.249.196:80",
+    "203.192.217.6:8080"
 ]
 
 async def saltar_ouo(page, url):
-    print(f"[*] Iniciando cadena: {url}")
+    print(f"[*] Iniciando: {url}")
     try:
-        # Tiempo de espera largo para la carga inicial
-        await page.goto(url, wait_until="load", timeout=90000)
+        await page.goto(url, wait_until="domcontentloaded", timeout=60000)
         
-        # 25 intentos para asegurar que pase los 5 acortadores (2 clics por cada uno + margen)
         for i in range(25):
-            await asyncio.sleep(15) # Ouo requiere que el contador llegue a 0
+            await asyncio.sleep(12) 
             url_actual = page.url
             print(f"[*] Paso {i+1} - URL: {url_actual}")
 
-            # Condición de éxito: Llegar a Hotmart
             if "hotmart" in url_actual:
-                print("[!!!] ¡ÉXITO TOTAL! Hemos llegado a Hotmart.")
+                print("[!!!] ¡ÉXITO TOTAL EN HOTMART!")
                 return True
 
             try:
-                # Caso A: Etapa de "Get Link" (Botón btn-main)
-                # Usamos JavaScript para el clic porque es más efectivo contra bloqueos
-                btn_exists = await page.query_selector("#btn-main")
-                if btn_exists:
+                # 1. Intentar cliquear por ID (El método rápido)
+                if await page.query_selector("#btn-main"):
+                    await page.evaluate("document.getElementById('btn-main').click();")
+                    print("[+] Clic por ID btn-main")
+                
+                # 2. Si falla, intentar enviar cualquier formulario que parezca captcha
+                elif await page.query_selector("form"):
+                    await page.evaluate("""
+                        let f = document.querySelector('form[action*="go"], form[action*="captcha"]');
+                        if(f) f.submit();
+                    """)
+                    print("[+] Formulario enviado por lógica de acción")
+
+                # 3. CLIC DE EMERGENCIA (Busca cualquier botón que sea el de 'Next' o 'Get Link')
+                else:
+                    print("[?] Buscando botones ocultos...")
+                    await page.evaluate("""
+                        document.querySelectorAll('button').forEach(b => {
+                            if(b.innerText.includes('human') || b.innerText.includes('Get') || b.id == 'btn-main') b.click();
+                        });
+                    """)
+            except:
+                pass
+                
+    except Exception as e:
+        print(f"[!] Error: {e}")
+
+async def main():
+    proxies = LISTA_PROXIES
+    random.shuffle(proxies)
+
+    async with async_playwright() as p:
+        for i, proxy_actual in enumerate(proxies):
+            print(f"\n--- Intento {i+1} - Proxy: {proxy_actual} ---")
+            try:
+                browser = await p.chromium.launch(headless=True, proxy={'server': f'http://{proxy_actual}'})
+                # Cambiamos a User-Agent de Windows para más estabilidad
+                context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36")
+                page = await context.new_page()
+
+                await saltar_ouo(page, "https://ouo.io/8KpMim")
+                await browser.close()
+            except:
+                continue
+
+if __name__ == "__main__":
+    asyncio.run(main())
                     print("[+] Detectado botón 'Get Link'. Ejecutando clic...")
                     await page.evaluate("document.getElementById('btn-main').click();")
                     continue
