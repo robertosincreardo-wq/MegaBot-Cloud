@@ -1,4 +1,26 @@
+name: BotVistasOuo
 on:
+  workflow_dispatch: # Botón manual en Actions
   schedule:
-    - cron: '*/20 * * * *' # CADA 20 MINUTOS
-  workflow_dispatch:
+    - cron: '*/20 * * * *' # SE EJECUTA CADA 20 MINUTOS
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar codigo del repo
+        uses: actions/checkout@v3
+
+      - name: Configurar Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Instalar Playwright y dependencias
+        run: |
+          pip install playwright requests
+          python -m playwright install chromium --with-deps
+
+      - name: Ejecutar Bot Maestro
+        # Si el bot tarda mas de 15 minutos, GitHub lo detiene para no gastar minutos gratis
+        run: timeout 900s python bot.py || true
