@@ -2,106 +2,112 @@ import asyncio
 from playwright.async_api import async_playwright
 import random
 import time
-import re
 import os
+import re
 
-def extraer_ips_locales():
-    print("[*] Leyendo IPs del archivo proxies.txt...")
-    try:
-        if os.path.exists("proxies.txt"):
-            with open("proxies.txt", "r") as f:
-                contenido = f.read()
-            ips = re.findall(r'\d+\.\d+\.\d+\.\d+:\d+', contenido)
-            print(f"[!] Se encontraron {len(ips)} IPs válidas.")
-            return ips
-    except Exception as e:
-        print(f"[X] Error leyendo proxies.txt: {e}")
-    return []
+def extraer_proxies_webshare():
+    # Buscamos el archivo que descargaste
+    nombre_archivo = "Webshare 10 proxies.txt"
+    lista_final = []
+    if os.path.exists(nombre_archivo):
+        with open(nombre_archivo, "r") as f:
+            for linea in f:
+                partes = linea.strip().split(":")
+                if len(partes) == 4:
+                    # Guardamos los datos ordenados
+                    lista_final.append({
+                        "server": f"http://{partes[0]}:{partes[1]}",
+                        "user": partes[2],
+                        "pass": partes[3]
+                    })
+    print(f"[*] Se cargaron {len(lista_final)} proxies de Webshare.")
+    return lista_final
 
 async def saltar_ouo(page, url_objetivo):
-    # Forzamos que use el enlace con el código
-    print(f"[*] Navegando a destino real: {url_objetivo}")
-    
+    print(f"[*] Navegando a: {url_objetivo}")
     try:
-        # Aumentamos el tiempo de espera por los proxies lentos
+        # Cargamos el link principal
         await page.goto(url_objetivo, wait_until="domcontentloaded", timeout=60000)
         
-        for i in range(25):
-            await asyncio.sleep(15) # Tiempo para que cargue el botón y Cloudflare
+        # 30 pasos para cubrir toda la cadena de 5 acortadores
+        for i in range(30):
+            await asyncio.sleep(12) 
             url_actual = page.url
             print(f"[*] Paso {i+1} - URL: {url_actual}")
 
             if "hotmart" in url_actual:
-                print("[!!!] ¡VISTA COMPLETADA! Llegamos a Hotmart.")
+                print("[!!!] ¡ÉXITO TOTAL! Llegamos a Hotmart.")
                 return True
 
+            # Si el proxy falla y sale error de Chrome
+            if "chrome-error" in url_actual or "chromewebdata" in url_actual:
+                print("[!] Error de conexión. Reintentando...")
+                await page.go_back()
+                continue
+
             if "ouo.press" in url_actual:
-                print("[!] Trampa detectada. Volviendo atrás...")
+                print("[!] Detectado ouo.press. Volviendo atrás...")
                 await page.go_back()
                 continue
 
             try:
-                # Intentamos Clic o enviar formulario
+                # Prioridad 1: Botón Get Link
                 btn = await page.query_selector("#btn-main")
                 if btn:
-                    print("[+] Botón 'Get Link' detectado. Clickeando...")
+                    print("[+] Clic en 'Get Link'")
                     await page.evaluate("document.getElementById('btn-main').click();")
                     continue
                 
-                form = await page.query_selector("form[id*='captcha']")
+                # Prioridad 2: Formulario Captcha (Turnstile invisible)
+                form = await page.query_selector("#form-captcha")
                 if form:
-                    print("[+] Captcha detectado. Enviando formulario...")
+                    print("[+] Enviando Formulario Captcha")
                     await page.evaluate("document.getElementById('form-captcha').submit();")
                     continue
             except:
                 pass
     except Exception as e:
-        print(f"[!] Error de carga: {e}")
+        print(f"[!] Error de navegación: {e}")
 
 async def main():
-    proxies = extraer_ips_locales()
-    if not proxies:
-        print("[X] No hay proxies. Abortando.")
+    proxies_ws = extraer_proxies_webshare()
+    
+    if not proxies_ws:
+        print("[X] No se encontró el archivo de Webshare o está vacío.")
         return
 
-    random.shuffle(proxies)
-
     async with async_playwright() as p:
-        # Probaremos con las primeras 20 IPs de tu lista
-        for i in range(min(len(proxies), 20)):
-            proxy_actual = proxies[i]
-            print(f"\n--- Intento {i+1} - IP: {proxy_actual} ---")
+        # Vamos a usar cada uno de los 10 proxies en orden
+        for i, datos in enumerate(proxies_ws):
+            print(f"\n--- Intento {i+1} con Proxy Webshare: {datos['server']} ---")
             
             try:
+                # Configuración con Autenticación (Usuario y Pass)
                 browser = await p.chromium.launch(
-                    headless=True, 
-                    proxy={'server': f'http://{proxy_actual}'}
+                    headless=True,
+                    proxy={
+                        "server": datos["server"],
+                        "username": datos["user"],
+                        "password": datos["pass"]
+                    }
                 )
                 
-                # --- MODO STEALTH (Humanización) ---
+                # Stealth: Humanizar el navegador
                 context = await browser.new_context(
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-                    viewport={'width': 1920, 'height': 1080}
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
                 )
-                
-                # Ocultar que es un bot a nivel de sistema
-                await context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-                
                 page = await context.new_page()
 
-                # LEER TU ENLACE DEL ARCHIVO links.txt
-                enlace_final = ""
+                # Tu enlace
+                enlace = "https://ouo.io"
                 if os.path.exists("links.txt"):
                     with open("links.txt", "r") as f:
-                        enlace_final = f.read().strip()
-                
-                # Si el archivo está vacío, usa este por defecto
-                if not enlace_final:
-                    enlace_final = "https://ouo.io"
+                        enlace = f.read().strip() or enlace
 
-                await saltar_ouo(page, enlace_final)
+                await saltar_ouo(page, enlace)
                 await browser.close()
-            except:
+            except Exception as e:
+                print(f"[!] Error con este proxy: {e}")
                 continue
 
 if __name__ == "__main__":
