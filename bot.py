@@ -4,91 +4,93 @@ import random
 import time
 import os
 
-# --- CONFIGURACIÓN DE WEBSHARE ROTATIVO ---
-# Usa los datos que me pasaste antes. 
-# El usuario con "-rotate" es la clave para que la IP cambie sola.
-WS_PROXY = "http://webshare.io"
+# --- DATOS DE ROTACIÓN WEBSHARE (Tu cuenta) ---
 WS_USER = "inrjymkc-rotate"
 WS_PASS = "kyhwkgls9xnq"
-PROXY_URL = f"http://{WS_USER}:{WS_PASS}@p.webshare.io:80"
+WS_SERVER = "p.webshare.io:80" 
+PROXY_URL = f"http://{WS_USER}:{WS_PASS}@{WS_SERVER}"
 
-async def saltar_ouo(page, url_objetivo):
+async def saltar_ouo(page, link_objetivo):
+    print(f"[*] Navegando a: {link_objetivo}")
     try:
-        # Cargamos el link
-        await page.goto(url_objetivo, wait_until="domcontentloaded", timeout=40000)
+        # Cargamos el link (60 segundos de espera máximo)
+        await page.goto(link_objetivo, wait_until="domcontentloaded", timeout=60000)
         
-        for i in range(20): # Máximo 20 pasos para no perder tiempo
-            await asyncio.sleep(11) # Tiempo justo para el contador de Ouo
+        for i in range(25):
+            await asyncio.sleep(12) # Espera del contador de Ouo
             url_actual = page.url
-            print(f"      [Paso {i+1}] -> {url_actual[:45]}")
+            print(f"   [Paso {i+1}] URL: {url_actual[:50]}")
 
-            # DETECCIÓN DE DESTINO (Si llegamos a Hotmart o YouTube o cualquier final)
-            acortadores = ["ouo.io", "ouo.press", "shrink", "shink", "xreallcygo"]
-            if not any(x in url_actual.lower() for x in acortadores):
-                print(f"      [!!!] DESTINO ALCANZADO.")
+            # 1. ÉXITO: Si la URL ya no es de Ouo
+            if "ouo" not in url_actual.lower() and "http" in url_actual:
+                print(f"[!!!] DESTINO ALCANZADO: {url_actual}")
                 return True
 
+            # 2. TRUCO QUE TE FUNCIONÓ: Si cae en .press, volver atrás
             if "ouo.press" in url_actual:
+                print("[!] Trampa detectada. Volviendo atrás...")
                 await page.go_back()
                 continue
 
-            # Clic o Submit rápido
             try:
-                await page.evaluate("""
-                    let b = document.getElementById('btn-main') || document.querySelector('button');
-                    if(b) b.click();
-                    let f = document.getElementById('form-captcha') || document.getElementById('form-go');
-                    if(f) f.submit();
-                """)
-            except: pass
-    except:
-        print("      [!] Error en esta IP.")
+                # 3. ACCIÓN: Clic en botón o Enviar formulario
+                btn = await page.query_selector("#btn-main")
+                if btn:
+                    await page.evaluate("document.getElementById('btn-main').click();")
+                    print("   [+] Clic en Get Link")
+                    continue
+                
+                form = await page.query_selector("#form-captcha")
+                if form:
+                    await page.evaluate("document.getElementById('form-captcha').submit();")
+                    print("   [+] Formulario enviado")
+                    continue
+            except:
+                pass
+    except Exception as e:
+        print(f"[X] Error de carga con esta IP: {e}")
     return False
 
 async def main():
-    # Cargar tus links
+    # Leer links.txt
+    links = []
     if os.path.exists("links.txt"):
         with open("links.txt", "r") as f:
-            links = [l.strip() for l in f if l.strip()]
-    else:
-        print("[X] No hay links.txt"); return
+            links = [line.strip() for line in f if line.strip()]
+    
+    if not links:
+        links = ["https://ouo.io"] # Link de respaldo
 
     async with async_playwright() as p:
-        # VAMOS A HACER 40 SESIONES POR CADA EJECUCIÓN
-        # Cada sesión forzará a Webshare a darnos una IP distinta
-        for i in range(40):
-            link_elegido = random.choice(links)
-            print(f"\n[Sincronizando Sesión {i+1}/40] Obteniendo IP nueva...")
+        # Haremos 30 sesiones. En cada una, Webshare ROTARÁ la IP.
+        for i in range(30):
+            link_actual = random.choice(links)
+            print(f"\n--- SESIÓN {i+1}/30 | Usando IP Rotativa ---")
             
             browser = None
             try:
-                # Al abrir el browser con el proxy rotativo, Webshare asigna IP nueva
-                browser = await p.chromium.launch(headless=True, proxy={"server": PROXY_URL})
+                # Lanzamos navegador con el proxy de Webshare
+                browser = await p.chromium.launch(
+                    headless=True,
+                    proxy={"server": PROXY_URL}
+                )
                 
-                # Variamos el User-Agent para que Ouo crea que son personas distintas
-                user_agents = [
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/123.0.0.0",
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/122.0.0.0",
-                    "Mozilla/5.0 (X11; Linux x86_64) Chrome/121.0.0.0"
-                ]
-                
-                context = await browser.new_context(user_agent=random.choice(user_agents))
+                # Contexto con huella humana (Stealth)
+                context = await browser.new_context(
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                )
                 page = await context.new_page()
-                
-                # Ejecutar el salto
-                # Ponemos un tiempo límite de 3 minutos por IP para no estancarnos
-                try:
-                    await asyncio.wait_for(saltar_ouo(page, link_elegido), timeout=180)
-                except asyncio.TimeoutError:
-                    print("      [!] Sesión lenta, saltando a la siguiente IP...")
 
+                # Ejecutamos el salto del link
+                await saltar_ouo(page, link_actual)
+                
             except Exception as e:
-                print(f"      [X] Fallo de conexión: {e}")
+                print(f"[!] Fallo al iniciar sesión: {e}")
             finally:
                 if browser:
-                    await browser.close()
+                    await browser.close() # Cerramos para limpiar cookies y cambiar IP
             
-            # Pausa de 2 segundos para que Webshare procese el cambio de IP
+            # Pausa breve entre sesiones
             await asyncio.sleep(2)
 
 if __name__ == "__main__":
