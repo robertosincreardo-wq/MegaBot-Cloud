@@ -3,77 +3,83 @@ from playwright.async_api import async_playwright
 import random
 import time
 import os
+import re
 
 def extraer_proxies_webshare():
     nombre_archivo = "Webshare 10 proxies.txt"
     lista_final = []
+    
     if os.path.exists(nombre_archivo):
         with open(nombre_archivo, "r") as f:
-            for linea in f:
-                partes = linea.strip().split(":")
-                if len(partes) == 4:
-                    lista_final.append({
-                        "server": f"http://{partes[0]}:{partes[1]}",
-                        "user": partes[2],
-                        "pass": partes[3]
-                    })
-    # MEZCLAMOS los proxies para que no se usen siempre en el mismo orden
+            contenido = f.read()
+            # Buscamos el formato: protocolo://usuario:pass@ip:puerto O ip:puerto:user:pass
+            # Esta regex es mas potente para capturar lo que copiaste
+            patron = re.compile(r'(\d+\.\d+\.\d+\.\d+):(\d+):([^:\s]+):([^:\s]+)')
+            lineas = patron.findall(contenido)
+            
+            if not lineas:
+                # Intento 2: Buscar formato con el @ (como el curl que pasaste)
+                patron_curl = re.compile(r'([^:\s]+):([^@\s]+)@(\d+\.\d+\.\d+\.\d+):(\d+)')
+                lineas_curl = patron_curl.findall(contenido)
+                for user, pw, ip, port in lineas_curl:
+                    lista_final.append({"server": f"socks5://{ip}:{port}", "user": user, "pass": pw})
+            else:
+                for ip, port, user, pw in lineas:
+                    lista_final.append({"server": f"socks5://{ip}:{port}", "user": user, "pass": pw})
+    
     random.shuffle(lista_final)
-    print(f"[*] Se cargaron {len(lista_final)} proxies de Webshare en orden aleatorio.")
+    print(f"[*] Se cargaron {len(lista_final)} proxies SOCKS5 de Webshare.")
     return lista_final
 
 async def saltar_ouo(page, url_objetivo):
-    print(f"[*] Navegando a: {url_objetivo}")
+    print(f"[*] Iniciando cadena en: {url_objetivo}")
     try:
-        await page.goto(url_objetivo, wait_until="domcontentloaded", timeout=60000)
+        # Cargamos el enlace con tiempo de espera generoso para SOCKS5
+        await page.goto(url_objetivo, wait_until="domcontentloaded", timeout=80000)
         
         for i in range(30):
-            await asyncio.sleep(13) # Un poco más de tiempo para asegurar la vista
+            await asyncio.sleep(15) 
             url_actual = page.url
             print(f"[*] Paso {i+1} - URL: {url_actual}")
 
             if "hotmart" in url_actual:
-                print("[!!!] ¡EXITO TOTAL! Vista completada y llegada a Hotmart.")
+                print("[!!!] ¡VISTA COMPLETADA! Llegamos a Hotmart.")
                 return True
 
             if "ouo.press" in url_actual:
-                print("[!] Trampa detectada. Volviendo atrás para resetear IP...")
+                print("[!] Detectado ouo.press. Volviendo atrás...")
                 await page.go_back()
                 continue
 
             try:
-                # Intentamos Clic en el botón principal
+                # 1. Botón Get Link
                 btn = await page.query_selector("#btn-main")
                 if btn:
                     print("[+] Clic en 'Get Link'")
                     await page.evaluate("document.getElementById('btn-main').click();")
                     continue
                 
-                # Intentamos enviar el formulario de Captcha
+                # 2. Formulario Captcha
                 form = await page.query_selector("#form-captcha")
                 if form:
                     print("[+] Enviando Formulario")
                     await page.evaluate("document.getElementById('form-captcha').submit();")
                     continue
-            except:
-                pass
+            except: pass
     except Exception as e:
-        print(f"[!] Error: {e}")
+        print(f"[!] Error de navegación: {e}")
 
 async def main():
     proxies_ws = extraer_proxies_webshare()
-    
     if not proxies_ws:
-        print("[X] El archivo de Webshare no existe.")
+        print("[X] Revisa tu archivo de proxies. No se detectó el formato IP:PORT:USER:PASS")
         return
 
     async with async_playwright() as p:
-        # Probamos cada proxy de tu lista de 10
         for i, datos in enumerate(proxies_ws):
-            print(f"\n--- SESIÓN ÚNICA {i+1} - IP: {datos['server']} ---")
-            
+            print(f"\n--- SESIÓN {i+1} ---")
             try:
-                # Creamos una instancia de navegador TOTALMENTE LIMPIA
+                # SOCKS5 con autenticación inyectada
                 browser = await p.chromium.launch(
                     headless=True,
                     proxy={
@@ -83,19 +89,17 @@ async def main():
                     }
                 )
                 
-                # Fingerprint nueva para cada sesión
                 context = await browser.new_context(
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/12" + str(random.randint(0,9)) + ".0.0.0 Safari/537.36"
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
                 )
-                page = await context.new_page()
-
-                # Tu link real
-                await saltar_ouo(page, "https://ouo.io")
+                # Script Stealth para ocultar el bot
+                await context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
                 
-                # Cerramos todo para asegurar que la siguiente IP empiece de cero
+                page = await context.new_page()
+                await saltar_ouo(page, "https://ouo.io")
                 await browser.close()
-                print(f"[*] Sesión {i+1} finalizada y cookies borradas.")
-            except:
+            except Exception as e:
+                print(f"[!] Error: {e}")
                 continue
 
 if __name__ == "__main__":
