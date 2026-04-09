@@ -3,53 +3,37 @@ from playwright.async_api import async_playwright
 import random
 import time
 import os
-import re
 
-# --- AJUSTES DE VELOCIDAD PARA EL PAGO ---
-MAX_PASOS = 20 # Suficiente para 5 acortadores
-TIEMPO_ESPERA = 10 # Bajamos de 14 a 10 segundos
-TIMEOUT_CARGA = 30000 # 30 segundos máximo para cargar la web
+# --- CONFIGURACIÓN DE WEBSHARE ROTATIVO ---
+# Usa los datos que me pasaste antes. 
+# El usuario con "-rotate" es la clave para que la IP cambie sola.
+WS_PROXY = "http://webshare.io"
+WS_USER = "inrjymkc-rotate"
+WS_PASS = "kyhwkgls9xnq"
+PROXY_URL = f"http://{WS_USER}:{WS_PASS}@p.webshare.io:80"
 
-def extraer_proxies_maestro():
-    lista_final = []
-    archivos = ["proxies.txt", "Webshare proxies.txt"]
-    for nombre in archivos:
-        if os.path.exists(nombre):
-            with open(nombre, "r") as f:
-                contenido = f.read()
-                # Detecta ambos formatos (ip:port:user:pass y user:pass@ip:port)
-                p1 = re.findall(r'(\d+\.\d+\.\d+\.\d+):(\d+):([^:\s]+):([^:\s]+)', contenido)
-                for ip, port, user, pw in p1:
-                    lista_final.append({"server": f"http://{ip}:{port}", "user": user, "pass": pw})
-                p2 = re.findall(r'([^:\s"\'@]+):([^@\s"\':]+)@(\d+\.\d+\.\d+\.\d+):(\d+)', contenido)
-                for user, pw, ip, port in p2:
-                    lista_final.append({"server": f"http://{ip}:{port}", "user": user, "pass": pw})
-    random.shuffle(lista_final)
-    print(f"[*] {len(lista_final)} IPs listas. Iniciando modo ráfaga...")
-    return lista_final
-
-async def saltar_cadena(page, url_inicial):
+async def saltar_ouo(page, url_objetivo):
     try:
-        # Si el link no carga en 30s, saltamos la IP
-        await page.goto(url_inicial, wait_until="domcontentloaded", timeout=TIMEOUT_CARGA)
+        # Cargamos el link
+        await page.goto(url_objetivo, wait_until="domcontentloaded", timeout=40000)
         
-        for paso in range(MAX_PASOS):
-            await asyncio.sleep(TIEMPO_ESPERA)
-            url_act = page.url
-            print(f"   [Paso {paso+1}] -> {url_act[:50]}...")
+        for i in range(20): # Máximo 20 pasos para no perder tiempo
+            await asyncio.sleep(11) # Tiempo justo para el contador de Ouo
+            url_actual = page.url
+            print(f"      [Paso {i+1}] -> {url_actual[:45]}")
 
-            # DETECCIÓN DE ÉXITO (Modo agresivo)
-            acortadores = ["ouo.io", "ouo.press", "shrink", "shink", "xreallcygo", "cloudflare", "captcha"]
-            if not any(x in url_act.lower() for x in acortadores) and "http" in url_act:
-                print(f"   [!!!] DESTINO ALCANZADO: {url_act}")
+            # DETECCIÓN DE DESTINO (Si llegamos a Hotmart o YouTube o cualquier final)
+            acortadores = ["ouo.io", "ouo.press", "shrink", "shink", "xreallcygo"]
+            if not any(x in url_actual.lower() for x in acortadores):
+                print(f"      [!!!] DESTINO ALCANZADO.")
                 return True
 
-            if "ouo.press" in url_act:
+            if "ouo.press" in url_actual:
                 await page.go_back()
                 continue
 
+            # Clic o Submit rápido
             try:
-                # Clic rápido por script
                 await page.evaluate("""
                     let b = document.getElementById('btn-main') || document.querySelector('button');
                     if(b) b.click();
@@ -58,38 +42,54 @@ async def saltar_cadena(page, url_inicial):
                 """)
             except: pass
     except:
-        print("   [!] IP demasiado lenta. Saltando...")
+        print("      [!] Error en esta IP.")
     return False
 
 async def main():
-    proxies = extraer_proxies_maestro()
-    if not proxies: return
-
+    # Cargar tus links
     if os.path.exists("links.txt"):
         with open("links.txt", "r") as f:
             links = [l.strip() for l in f if l.strip()]
-    else: return
+    else:
+        print("[X] No hay links.txt"); return
 
     async with async_playwright() as p:
-        # Procesamos en tandas de 10 para ver logs rápido
-        for i in range(min(len(proxies), 100)):
-            proxy_act = proxies[i]
-            link_act = random.choice(links)
-            
-            print(f"\n--- SESIÓN {i+1}/{len(proxies)} | IP: {proxy_act['server']} ---")
+        # VAMOS A HACER 40 SESIONES POR CADA EJECUCIÓN
+        # Cada sesión forzará a Webshare a darnos una IP distinta
+        for i in range(40):
+            link_elegido = random.choice(links)
+            print(f"\n[Sincronizando Sesión {i+1}/40] Obteniendo IP nueva...")
             
             browser = None
             try:
-                browser = await p.chromium.launch(headless=True, proxy={
-                    "server": proxy_act["server"], "username": proxy_act["user"], "password": proxy_act["pass"]
-                })
-                context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+                # Al abrir el browser con el proxy rotativo, Webshare asigna IP nueva
+                browser = await p.chromium.launch(headless=True, proxy={"server": PROXY_URL})
+                
+                # Variamos el User-Agent para que Ouo crea que son personas distintas
+                user_agents = [
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/123.0.0.0",
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/122.0.0.0",
+                    "Mozilla/5.0 (X11; Linux x86_64) Chrome/121.0.0.0"
+                ]
+                
+                context = await browser.new_context(user_agent=random.choice(user_agents))
                 page = await context.new_page()
-                # Ponemos un tiempo límite por IP para no estancarnos
-                await asyncio.wait_for(saltar_cadena(page, link_act), timeout=200) # 3 min max por IP
-            except: pass
+                
+                # Ejecutar el salto
+                # Ponemos un tiempo límite de 3 minutos por IP para no estancarnos
+                try:
+                    await asyncio.wait_for(saltar_ouo(page, link_elegido), timeout=180)
+                except asyncio.TimeoutError:
+                    print("      [!] Sesión lenta, saltando a la siguiente IP...")
+
+            except Exception as e:
+                print(f"      [X] Fallo de conexión: {e}")
             finally:
-                if browser: await browser.close()
+                if browser:
+                    await browser.close()
+            
+            # Pausa de 2 segundos para que Webshare procese el cambio de IP
+            await asyncio.sleep(2)
 
 if __name__ == "__main__":
     asyncio.run(main())
