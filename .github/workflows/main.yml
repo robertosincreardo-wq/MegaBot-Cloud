@@ -1,7 +1,8 @@
 name: BotAcortadores
 on:
+  workflow_dispatch: # Botón manual en la pestaña Actions
   schedule:
-    - cron: '0 * * * *'
+    - cron: '0 * * * *' # Se ejecuta automáticamente cada hora
 
 jobs:
   run-bot:
@@ -15,11 +16,10 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Instalar Dependencias y Navegadores
+      - name: Instalar Playwright y Dependencias
         run: |
           pip install playwright requests
-          # Este comando es el que faltaba y es crítico:
           python -m playwright install chromium --with-deps
 
-      - name: Ejecutar Bot
+      - name: Ejecutar Bot Maestro
         run: python bot.py
