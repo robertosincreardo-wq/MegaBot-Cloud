@@ -1,4 +1,4 @@
-            - name: Instalar Playwright y Navegadores
+         - name: Instalar Playwright y Navegadores
         run: |
           pip install playwright
           # Instalamos los 3 motores y sus dependencias de sistema
