@@ -1,26 +1,12 @@
-name: BotVistasOuo
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: '*/20 * * * *'
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
     steps:
-      - name: Descargar codigo
-        uses: actions/checkout@v3
-
-      - name: Configurar Python
+      - uses: actions/checkout@v3
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-
-      - name: Instalar Playwright
+      - name: Install dependencies
         run: |
-          pip install playwright requests
-          python -m playwright install chromium --with-deps
-
-      - name: Ejecutar Bot
-        # Eliminamos el timeout de linux para evitar el error EPIPE
+          pip install playwright
+          playwright install chromium
+      - name: Run Bot
         run: python bot.py
