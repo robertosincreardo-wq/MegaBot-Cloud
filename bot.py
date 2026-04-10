@@ -4,81 +4,75 @@ import os
 from playwright.async_api import async_playwright
 
 async def ver_video(proxy_line, video_id):
-    ip = proxy_line.split(':')[0]
-    try:
-        user_pass_ip_port = proxy_line.split(':')
-        proxy_config = {
-            "server": f"http://{user_pass_ip_port[0]}:{user_pass_ip_port[1]}",
-            "username": user_pass_ip_port[2],
-            "password": user_pass_ip_port[3]
-        }
+    # Separar correctamente: ip:puerto:usuario:contraseña
+    datos = proxy_line.split(':')
+    if len(datos) != 4:
+        print(f"[!] Formato de proxy incorrecto: {proxy_line}")
+        return
+    
+    ip, puerto, user, password = datos
+    proxy_config = {
+        "server": f"http://{ip}:{puerto}",
+        "username": user,
+        "password": password
+    }
 
-        async with async_playwright() as p:
-            # Lanzamiento con camuflaje avanzado
-            browser = await p.chromium.launch(headless=True, args=[
-                '--no-sandbox',
-                '--disable-blink-features=AutomationControlled',
-                '--mute-audio' # Importante para no gastar recursos
-            ])
-            
-            # Perfil de usuario real
+    async with async_playwright() as p:
+        try:
+            print(f"[*] IP {ip}: Iniciando navegador...")
+            browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
             context = await browser.new_context(
                 proxy=proxy_config,
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-                viewport={'width': 1280, 'height': 720}
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
             )
             page = await context.new_page()
 
-            # 1. "Calentar" la IP entrando primero a Google
-            await page.goto("https://google.com", wait_until="networkidle")
-            await asyncio.sleep(random.randint(3, 5))
+            # Aumentamos el tiempo de espera a 120 segundos para proxies lentos
+            page.set_default_timeout(120000)
 
-            # 2. Entrar al video de Somnus Lab
-            print(f"[*] IP {ip}: Cargando video...")
-            await page.goto(f"https://www.youtube.com/watch?v={video_id}", wait_until="load")
+            print(f"[*] IP {ip}: Cargando video (Timeout 120s)...")
+            # Usamos wait_until="commit" para que no espere a que carguen todos los anuncios
+            await page.goto(f"https://youtube.com{video_id}", wait_until="commit")
             
-            # 3. Bypass de carteles y simulación de Play
-            await asyncio.sleep(10)
+            await asyncio.sleep(15) # Espera a que el JS se asiente
+            
+            # Intentar dar Play si no arrancó solo
             try:
-                # Clic en el reproductor para asegurar que inicie
-                await page.click("button.ytp-play-button", timeout=10000)
-                print(f"[+] IP {ip}: Reproducción iniciada.")
-                
-                # 4. Bajar calidad a 144p para ahorrar proxy
-                await page.click("button.ytp-settings-button")
-                await page.click("text=Calidad") or await page.click("text=Quality")
-                await page.click("text=144p")
-                print(f"[+] IP {ip}: Calidad ajustada a 144p.")
+                await page.click("button.ytp-play-button", timeout=15000)
+                print(f"[+] IP {ip}: Reproducción activada.")
             except:
-                print(f"[-] IP {ip}: No se pudo interactuar con el reproductor, pero el video sigue.")
+                pass
 
-            # 5. Permanencia (Simulación de ver el video entre 45-55 minutos)
-            tiempo_vista = random.randint(2700, 3300) 
-            print(f"[*] IP {ip}: Viendo video por {tiempo_vista//60} minutos...")
+            # Simular que ve el video por 45-55 minutos
+            tiempo = random.randint(2700, 3300)
+            print(f"[SUCCESS] IP {ip}: Viendo video por {tiempo//60} min...")
             
-            # Simular scroll ocasional para parecer humano
-            for _ in range(tiempo_vista // 300):
-                await asyncio.sleep(300)
-                await page.mouse.wheel(0, random.randint(300, 700))
-                await asyncio.sleep(2)
-                await page.mouse.wheel(0, -random.randint(300, 700))
+            # Dividimos la espera en ciclos para mantener el bot vivo
+            for _ in range(tiempo // 60):
+                await asyncio.sleep(60)
+                # Pequeño scroll para que YouTube no piense que la pestaña se durmió
+                await page.mouse.wheel(0, 100)
+                await page.mouse.wheel(0, -100)
 
-            print(f"[SUCCESS] IP {ip}: Sesión finalizada correctamente.")
             await browser.close()
-
-    except Exception as e:
-        print(f"[!] Error IP {ip}: {str(e)[:50]}")
+        except Exception as e:
+            print(f"[!] Error IP {ip}: {str(e)[:60]}")
 
 async def main():
-    ID_VIDEO = "YF33K5irscg" # Tu video de Delta Waves
+    ID_VIDEO = "YF33K5irscg"
+    if not os.path.exists('Webshare 10 proxies.txt'):
+        print("[!] No existe el archivo de proxies.")
+        return
+
     with open('Webshare 10 proxies.txt', 'r') as f:
         proxies = [line.strip() for line in f if line.strip()]
 
-    # Entrada escalonada: una IP cada 45 segundos para no alertar a YouTube
+    print(f"[*] Lanzando {len(proxies)} espectadores escalonados...")
+    
     tasks = []
     for p_line in proxies:
         tasks.append(asyncio.create_task(ver_video(p_line, ID_VIDEO)))
-        await asyncio.sleep(45)
+        await asyncio.sleep(40) # Espera entre cada IP para no saturar la CPU de GitHub
     
     await asyncio.gather(*tasks)
 
