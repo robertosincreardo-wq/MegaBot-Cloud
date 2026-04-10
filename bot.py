@@ -1,36 +1,46 @@
 import asyncio
 from playwright.async_api import async_playwright
 
-# 1. Carga aquí tus 10 proxies nuevos (formato ip:puerto:user:pass o ip:puerto)
-NUEVOS_PROXIES = [
-    # "http://usuario:password@ip:puerto",
-    # ... pega aquí las líneas de tu archivo txt
-]
+async def procesar_todos_los_links():
+    # 1. Cargamos los proxies y los links desde tus archivos
+    with open('Webshare 10 proxies.txt', 'r') as f:
+        proxies = [line.strip() for line in f if line.strip()]
+    
+    with open('links.txt', 'r') as f:
+        enlaces = [line.strip() for line in f if line.strip()]
 
-async def navegar_con_prioridad_proxy():
     async with async_playwright() as p:
-        for proxy_url in NUEVOS_PROXIES:
-            print(f"[*] Probando con proxy: {proxy_url}")
+        for url in enlaces:
+            exito = False
+            print(f"\n[*] Procesando link: {url}")
             
-            # Configuración del navegador con el proxy actual
-            browser = await p.chromium.launch(headless=True, proxy={"server": proxy_url})
-            context = await browser.new_context()
-            page = await context.new_page()
+            # Intentamos cada link con la lista de proxies hasta que uno funcione
+            for proxy_url in proxies:
+                print(f"  [-] Intentando con proxy: {proxy_url}")
+                browser = None
+                try:
+                    # Configuramos el proxy (ajusta el formato si es ip:puerto:user:pass)
+                    browser = await p.chromium.launch(headless=True, proxy={"server": f"http://{proxy_url}"})
+                    context = await browser.new_context()
+                    page = await context.new_page()
+                    
+                    # Timeout de 90s para evitar el error anterior
+                    await page.goto(url, wait_until="domcontentloaded", timeout=90000)
+                    
+                    print(f"  [+] ¡Éxito en {url}!")
+                    # --- AQUÍ VA TU LÓGICA DE CLICS O INTERACCIÓN ---
+                    
+                    exito = True
+                    await browser.close()
+                    break # Pasamos al siguiente link de links.txt
+                    
+                except Exception as e:
+                    print(f"  [!] Falló proxy {proxy_url}: {e}")
+                    if browser:
+                        await browser.close()
+            
+            if not exito:
+                print(f"[!!!] No se pudo procesar el link {url} con ningún proxy.")
 
-            try:
-                # Aumentamos el timeout a 90s para dar margen a la carga con proxy
-                await page.goto("https://ouo.io", wait_until="domcontentloaded", timeout=90000)
-                print("[+] Conexión exitosa a ouo.io")
-                
-                # Aquí puedes añadir la lógica de interacción que usamos la primera vez
-                # ...
-                
-                await browser.close()
-                break # Si funciona, salimos del bucle
-                
-            except Exception as e:
-                print(f"[!] Error con proxy {proxy_url}: {e}")
-                await browser.close()
-
-# Ejecutar el script
-# asyncio.run(navegar_con_prioridad_proxy())
+# Ejecutar proceso
+# asyncio.run(procesar_todos_los_links())
