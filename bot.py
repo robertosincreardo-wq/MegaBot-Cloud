@@ -4,10 +4,6 @@ import os
 from playwright.async_api import async_playwright
 
 async def ejecutar_sesion():
-    if not os.path.exists('Webshare 10 proxies.txt') or not os.path.exists('links.txt'):
-        print("[!] Faltan archivos .txt")
-        return
-
     with open('Webshare 10 proxies.txt', 'r') as f:
         proxies = [line.strip() for line in f if line.strip()]
     with open('links.txt', 'r') as f:
@@ -21,56 +17,52 @@ async def ejecutar_sesion():
                 proxy_config = {"server": f"http://{ip}:{puerto}", "username": user, "password": password}
             except: continue
 
-            # Usamos Chromium con argumentos para evitar detección
-            browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-web-security'])
-            context = await browser.new_context(proxy=proxy_config, viewport={'width': 1280, 'height': 720})
+            # Lanzamos con argumentos para ocultar la automatización
+            browser = await p.chromium.launch(headless=True, args=[
+                '--no-sandbox', 
+                '--disable-blink-features=AutomationControlled'
+            ])
+            
+            # Simulamos un navegador Windows real con lenguaje español
+            context = await browser.new_context(
+                proxy=proxy_config,
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+                locale="es-ES",
+                extra_http_headers={"Referer": "https://google.com"}
+            )
             page = await context.new_page()
 
-            print(f"\n[*] INICIANDO: {url} | PROXY: {ip}")
+            print(f"\n[*] PROBANDO: {url} | PROXY: {ip}")
 
             try:
-                # Carga inicial
-                await page.goto(url, wait_until="domcontentloaded", timeout=90000)
+                # Navegar y esperar a que el contenido básico cargue
+                response = await page.goto(url, wait_until="domcontentloaded", timeout=60000)
                 
-                # --- PASO 1: I'M HUMAN ---
-                print("    [*] Esperando botón 'I'm a human'...")
+                if response.status >= 400:
+                    print(f"    [!] Error HTTP {response.status}. Proxy posiblemente bloqueado.")
+                
+                # --- PASO 1: ESPERA AGRESIVA POR EL BOTÓN ---
                 try:
-                    # Espera hasta 30 segundos a que el botón aparezca en el HTML
-                    boton = await page.wait_for_selector("button#btn-main", state="visible", timeout=30000)
-                    print("    [+] Botón detectado. Esperando 15s de seguridad...")
+                    # Esperamos hasta 40 segundos. Si no aparece, es bloqueo total.
+                    boton = await page.wait_for_selector("button#btn-main", state="visible", timeout=40000)
+                    print("    [+] Botón I'm Human detectado. Esperando 15s...")
                     await asyncio.sleep(15)
-                    
-                    await boton.hover() # Simular movimiento
                     await boton.click(force=True)
-                    print("    [OK] Clic en 'I'm a human' realizado.")
-                except:
-                    print("    [!] No se pudo dar clic en el Paso 1 (Captcha no cargó).")
-                    await browser.close()
-                    continue
-
-                # --- PASO 2: GET LINK (Contador de 10s) ---
-                await asyncio.sleep(5) # Espera a que cargue la segunda página
-                print("    [*] Esperando contador de 'Get Link' (Etapa 2)...")
-                try:
-                    # Esperamos a que el botón de Get Link aparezca
+                    
+                    # --- PASO 2: GET LINK ---
+                    await asyncio.sleep(5)
                     boton_get = await page.wait_for_selector("button#btn-main", state="visible", timeout=30000)
-                    
-                    # Esperamos 15 segundos (10 del contador + 5 de margen)
-                    print("    [+] Segundo botón detectado. Esperando 15s para que el contador llegue a cero...")
+                    print("    [+] Botón Get Link detectado. Esperando 15s...")
                     await asyncio.sleep(15)
-                    
-                    await boton_get.hover()
                     await boton_get.click(force=True)
-                    print("    [OK] Clic en 'Get Link' realizado.")
                     
-                    # MUY IMPORTANTE: Esperar 10s adicionales después del último clic para que el servidor registre la IP
-                    await asyncio.sleep(10)
-                    print(f"[SUCCESS] Vista completada para: {url}")
+                    await asyncio.sleep(10) # Tiempo para que cuente la vista
+                    print(f"[SUCCESS] ¡Vista completada!")
                 except:
-                    print("    [!] Error en el Paso 2 (Get Link no apareció).")
+                    print(f"    [!] Bloqueo detectado. Título de página: {await page.title()}")
 
             except Exception as e:
-                print(f"[!] Error de conexión: {str(e)[:50]}")
+                print(f"    [!] Error de red: {str(e)[:40]}")
             finally:
                 await browser.close()
 
