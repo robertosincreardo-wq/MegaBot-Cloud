@@ -1,7 +1,10 @@
-      run: |
-        pip install playwright
-        playwright install chromium firefox webkit
-        playwright install-deps
+            - name: Instalar Playwright y Navegadores
+        run: |
+          pip install playwright
+          # Instalamos los 3 motores y sus dependencias de sistema
+          playwright install chromium firefox webkit
+          playwright install-deps
+
 
   workflow_dispatch:
 
