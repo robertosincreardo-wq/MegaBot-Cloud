@@ -1,32 +1,24 @@
-         - name: Instalar Playwright y Navegadores
-        run: |
-          pip install playwright
-          # Instalamos los 3 motores y sus dependencias de sistema
-          playwright install chromium firefox webkit
-          playwright install-deps
-
-
+name: OuoBotCloud
+on:
   workflow_dispatch:
 
 jobs:
-  run-bot:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout del codigo
         uses: actions/checkout@v3
 
-      - name: Setup Python
+      - name: Configurar Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
-      - name: Install Playwright
+      - name: Instalar Playwright
         run: |
           pip install playwright
           playwright install chromium
           playwright install-deps chromium
 
-      - name: Execute
+      - name: Ejecutar Bot
         run: python bot.py
-        env:
-          PYTHONUNBUFFERED: 1
