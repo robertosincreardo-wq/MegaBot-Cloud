@@ -5,7 +5,7 @@ from playwright.async_api import async_playwright
 
 async def ejecutar_sesion():
     if not os.path.exists('Webshare 10 proxies.txt') or not os.path.exists('links.txt'):
-        print("[!] Faltan archivos .txt")
+        print("[!] Archivos no encontrados.")
         return
 
     with open('Webshare 10 proxies.txt', 'r') as f:
@@ -21,50 +21,56 @@ async def ejecutar_sesion():
                 proxy_config = {"server": f"http://{ip}:{puerto}", "username": user, "password": password}
             except: continue
 
-            # Usamos un User Agent real de Chrome para evitar sospechas
-            ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
-            
-            browser = await p.chromium.launch(headless=True, args=['--no-sandbox'])
-            context = await browser.new_context(proxy=proxy_config, user_agent=ua)
+            # Browser con resolución estándar
+            browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
+            context = await browser.new_context(
+                proxy=proxy_config,
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+                viewport={'width': 1280, 'height': 720}
+            )
             page = await context.new_page()
 
-            print(f"\n[*] PROCESANDO: {url} | PROXY: {ip}")
+            print(f"\n[*] ENTRANDO A: {url} | PROXY: {ip}")
 
             try:
-                # 1. Carga inicial
-                await page.goto(url, wait_until="networkidle", timeout=60000)
-                
-                # Intentamos hasta 3 pasos (a veces hay publicidad intermedia)
+                # 1. Carga inicial con tiempo de espera forzado para scripts
+                await page.goto(url, wait_until="load", timeout=90000)
+                await asyncio.sleep(10) # Espera técnica inicial
+
                 for paso in range(1, 4):
-                    if "ouo.io/press" in page.url:
-                        print(f"    [!] Error en /press. Regresando...")
+                    # Manejo de redirección basura
+                    if "ouo.io/press" in page.url or "google.com" in page.url:
+                        print("    [!] Redirección detectada. Volviendo...")
                         await page.go_back()
                         await asyncio.sleep(5)
 
-                    # Buscamos el botón btn-main
-                    btn = page.locator("button#btn-main")
-                    
-                    if await btn.is_visible():
-                        print(f"    [+] Paso {paso}: Botón detectado. Esperando 15s para que el token sea válido...")
-                        await asyncio.sleep(15) # Tiempo vital para que el script de ouo cargue
+                    # Esperar específicamente al botón btn-main
+                    try:
+                        # Forzamos a que espere a que el botón esté en el DOM y sea visible
+                        btn = await page.wait_for_selector("button#btn-main", timeout=20000)
                         
-                        # Clic real simulando humano
-                        await btn.click()
-                        print(f"    [*] Clic realizado en Paso {paso}. Esperando respuesta del servidor...")
-                        
-                        # ESPERA POST-CLIC: Vital para que la vista cuente
-                        await asyncio.sleep(10) 
-                    else:
-                        print(f"    [-] No se ve más botones en paso {paso}. Finalizando.")
+                        if paso == 1:
+                            print("    [+] Paso 1: I'm human. Esperando 15s...")
+                            await asyncio.sleep(15)
+                        else:
+                            print(f"    [+] Paso {paso}: Contador Get Link. Esperando 12s...")
+                            await asyncio.sleep(12) # Superamos los 10s del contador
+
+                        # Scroll y clic forzado vía JS para asegurar impacto
+                        await btn.scroll_into_view_if_needed()
+                        await btn.click(force=True)
+                        print(f"    [*] Clic paso {paso} realizado.")
+                        await asyncio.sleep(8) # Espera para que el servidor procese el POST
+
+                    except:
+                        print(f"    [-] No se encontró botón en paso {paso}. URL actual: {page.url[:40]}")
                         break
 
-                print(f"[SUCCESS] Proceso terminado para {url}")
+                print(f"[SUCCESS] Ciclo terminado para {url}")
 
             except Exception as e:
-                print(f"[!] Error: {str(e)[:50]}")
+                print(f"[!] Error crítico: {str(e)[:50]}")
             finally:
-                # Espera final antes de destruir el contexto
-                await asyncio.sleep(2)
                 await browser.close()
 
 if __name__ == "__main__":
