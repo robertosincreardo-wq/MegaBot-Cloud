@@ -1,61 +1,57 @@
-import asyncio
+import time
 import random
 import os
-from playwright.async_api import async_playwright
+import undetected_chromedriver as uc
+from stem import Signal
+from stem.control import Controller
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
-# Disfraces de navegadores para variar las visitas
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
-]
+# --- CONFIG ---
+RUTA_EXT = os.path.abspath("./extension")
+PROXY = "socks5://127.0.0.1:9050"
 
-async def ejecutar_sesion():
-    # Carga de archivos
-    with open('Webshare 10 proxies.txt', 'r') as f:
-        proxies = [line.strip() for line in f if line.strip()]
-    with open('links.txt', 'r') as f:
-        enlaces = [line.strip() for line in f if line.strip()]
+def cambiar_ip():
+    try:
+        with Controller.from_port(port=9051) as c:
+            c.authenticate()
+            c.signal(Signal.NEWNYM)
+        print("[!] IP Rotada")
+    except:
+        print("[X] Tor no responde")
 
-    async with async_playwright() as p:
-        for url in enlaces:
-            # 1. Configurar Proxy (ip:puerto:user:pass)
-            proxy_line = random.choice(proxies)
+def procesar():
+    # Parche para Python 3.14: Evitar que el deallocator rompa todo
+    options = uc.ChromeOptions()
+    options.add_argument(f'--proxy-server={PROXY}')
+    options.add_argument(f'--load-extension={RUTA_EXT}')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    
+    driver = None
+    try:
+        # Forzamos la version 146 para que coincida con tu Chrome
+        driver = uc.Chrome(options=options, version_main=146)
+        driver.get("https://ouo.io") # Prueba con un link real
+        
+        print("[*] Navegador abierto. Esperando 10 seg...")
+        time.sleep(10)
+        
+        # Aquí iría el resto de clics...
+        
+    except Exception as e:
+        print(f"[-] Error: {e}")
+    finally:
+        if driver:
             try:
-                ip, puerto, user, password = proxy_line.split(':')
-                proxy_config = {
-                    "server": f"http://{ip}:{puerto}",
-                    "username": user,
-                    "password": password
-                }
-            except Exception:
-                print(f"[!] Salto de línea de proxy inválida")
-                continue
-
-            ua = random.choice(USER_AGENTS)
-            print(f"\n[*] PROCESANDO: {url}")
-            print(f"[*] USANDO IP: {ip} | NAVEGADOR: {ua[:40]}...")
-
-            # 2. Lanzar Navegador (Solo Chromium para evitar fallos de instalación)
-            browser = await p.chromium.launch(headless=True, args=['--no-sandbox'])
-            context = await browser.new_context(proxy=proxy_config, user_agent=ua)
-            page = await context.new_page()
-
-            try:
-                # 3. Navegación y espera de 20 segundos
-                await page.goto(url, wait_until="commit", timeout=60000)
-                print(f"[+] Página cargada. Esperando 20 segundos...")
-                
-                await asyncio.sleep(20)
-                
-                print(f"[SUCCESS] Finalizado con éxito")
-
-            except Exception as e:
-                print(f"[!] Error en link: {str(e)[:50]}")
-            
-            finally:
-                await browser.close()
+                driver.close()
+                driver.quit()
+            except:
+                pass # Ignorar el error de controlador invalido de Python 3.14
 
 if __name__ == "__main__":
-    asyncio.run(ejecutar_sesion())
+    while True:
+        cambiar_ip()
+        procesar()
+        time.sleep(5)
