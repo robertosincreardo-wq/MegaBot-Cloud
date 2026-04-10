@@ -4,7 +4,6 @@ import os
 from playwright.async_api import async_playwright
 
 async def ejecutar_sesion():
-    # Leer archivos
     with open('Webshare 10 proxies.txt', 'r') as f:
         proxies = [line.strip() for line in f if line.strip()]
     with open('links.txt', 'r') as f:
@@ -12,7 +11,6 @@ async def ejecutar_sesion():
 
     async with async_playwright() as p:
         for url in enlaces:
-            # 1. Extraer datos del proxy (ip:puerto:user:pass)
             proxy_line = random.choice(proxies)
             ip, puerto, user, password = proxy_line.split(':')
             
@@ -22,39 +20,43 @@ async def ejecutar_sesion():
                 "password": password
             }
 
-            # 2. Rotación de Navegador Real (Chrome, Firefox o Safari)
-            browser_type = random.choice([p.chromium, p.firefox, p.webkit])
-            print(f"\n[*] LINK: {url}")
-            print(f"[*] MOTOR: {browser_type.name} | PROXY: {ip}")
+            # Selección de motor (Damos prioridad a Chromium si los otros fallan)
+            motores = [p.chromium, p.firefox, p.webkit]
+            random.shuffle(motores) # Mezclamos para variar
 
-            # 3. Lanzar navegador
-            browser = await browser_type.launch(headless=True, args=['--no-sandbox'] if browser_type == p.chromium else [])
-            
-            # 4. Configurar contexto (Disfraz de dispositivo)
-            context = await browser.new_context(
-                proxy=proxy_config,
-                viewport={'width': 1920, 'height': 1080},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
-            )
-            
-            page = await context.new_page()
+            for browser_type in motores:
+                browser = None
+                try:
+                    print(f"\n[*] INTENTANDO LINK: {url}")
+                    print(f"[*] MOTOR: {browser_type.name} | PROXY: {ip}")
 
-            try:
-                # 5. Navegar y esperar 20 segundos
-                await page.goto(url, wait_until="commit", timeout=90000)
-                print(f"[+] Cargado. Esperando 20 segundos...")
-                await asyncio.sleep(20)
-                
-                # Opcional: Tomar foto para ver si cargó bien
-                # await page.screenshot(path=f"evidencia_{ip}.png")
-                
-                print(f"[SUCCESS] Finalizado link con {browser_type.name}")
+                    # Lanzar navegador con argumentos de compatibilidad
+                    browser = await browser_type.launch(
+                        headless=True, 
+                        args=['--no-sandbox'] if browser_type == p.chromium else []
+                    )
+                    
+                    context = await browser.new_context(
+                        proxy=proxy_config,
+                        viewport={'width': 1280, 'height': 720},
+                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+                    )
+                    
+                    page = await context.new_page()
+                    await page.goto(url, wait_until="commit", timeout=60000)
+                    
+                    print(f"[+] Cargado con éxito. Esperando 20 segundos...")
+                    await asyncio.sleep(20)
+                    
+                    print(f"[SUCCESS] Finalizado con {browser_type.name}")
+                    await browser.close()
+                    break # Si funcionó, salimos del bucle de motores y vamos al siguiente link
 
-            except Exception as e:
-                print(f"[!] Error: {str(e)[:50]}")
-            
-            finally:
-                await browser.close()
+                except Exception as e:
+                    print(f"[!] Fallo con {browser_type.name}: Reintentando con otro motor...")
+                    if browser:
+                        await browser.close()
+                    continue # Intenta con el siguiente motor disponible
 
 if __name__ == "__main__":
     asyncio.run(ejecutar_sesion())
