@@ -3,19 +3,8 @@ import random
 import os
 from playwright.async_api import async_playwright
 
-# Lista de perfiles para engañar a ouo.io (Safari, Chrome, Edge)
-USER_AGENTS = [
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1", # Safari iPhone
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Safari/605.1.15",          # Safari Mac
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",    # Edge Windows
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"                             # Chrome Linux
-]
-
 async def ejecutar_sesion():
-    if not os.path.exists('Webshare 10 proxies.txt') or not os.path.exists('links.txt'):
-        print("[!] ERROR: Archivos .txt no encontrados")
-        return
-
+    # Leer archivos
     with open('Webshare 10 proxies.txt', 'r') as f:
         proxies = [line.strip() for line in f if line.strip()]
     with open('links.txt', 'r') as f:
@@ -23,40 +12,48 @@ async def ejecutar_sesion():
 
     async with async_playwright() as p:
         for url in enlaces:
-            proxy_actual = random.choice(proxies)
-            ua_actual = random.choice(USER_AGENTS) # Elegimos navegador al azar
+            # 1. Extraer datos del proxy (ip:puerto:user:pass)
+            proxy_line = random.choice(proxies)
+            ip, puerto, user, password = proxy_line.split(':')
             
-            print(f"\n[*] NAVEGANDO A: {url}")
-            print(f"[*] USANDO PROXY: {proxy_actual}")
-            print(f"[*] EMULANDO: {ua_actual[:50]}...")
+            proxy_config = {
+                "server": f"http://{ip}:{puerto}",
+                "username": user,
+                "password": password
+            }
 
-            # Lanzamos Chromium pero lo disfrazamos con el User Agent
-            browser = await p.chromium.launch(headless=True, args=['--no-sandbox'])
+            # 2. Rotación de Navegador Real (Chrome, Firefox o Safari)
+            browser_type = random.choice([p.chromium, p.firefox, p.webkit])
+            print(f"\n[*] LINK: {url}")
+            print(f"[*] MOTOR: {browser_type.name} | PROXY: {ip}")
+
+            # 3. Lanzar navegador
+            browser = await browser_type.launch(headless=True, args=['--no-sandbox'] if browser_type == p.chromium else [])
             
-            # Configuramos el contexto con el navegador elegido y el proxy
+            # 4. Configurar contexto (Disfraz de dispositivo)
             context = await browser.new_context(
-                user_agent=ua_actual,
-                proxy={"server": f"http://{proxy_actual}"},
-                viewport={'width': 1280, 'height': 720}
+                proxy=proxy_config,
+                viewport={'width': 1920, 'height': 1080},
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
             )
             
             page = await context.new_page()
 
             try:
-                # Timeout de 90s y carga inicial
+                # 5. Navegar y esperar 20 segundos
                 await page.goto(url, wait_until="commit", timeout=90000)
-                
-                # ESPERA DE 20 SEGUNDOS (Tu requerimiento)
-                print(f"[+] Página abierta. Esperando 20 segundos para validar...")
+                print(f"[+] Cargado. Esperando 20 segundos...")
                 await asyncio.sleep(20)
                 
-                print(f"[SUCCESS] {url} completado.")
+                # Opcional: Tomar foto para ver si cargó bien
+                # await page.screenshot(path=f"evidencia_{ip}.png")
+                
+                print(f"[SUCCESS] Finalizado link con {browser_type.name}")
 
             except Exception as e:
                 print(f"[!] Error: {str(e)[:50]}")
             
             finally:
-                await context.close()
                 await browser.close()
 
 if __name__ == "__main__":
