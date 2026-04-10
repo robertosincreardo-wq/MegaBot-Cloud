@@ -1,57 +1,63 @@
 import asyncio
 import random
+import os
 from playwright.async_api import async_playwright
 
-async def procesar_enlaces():
-    # 1. Cargar proxies y enlaces desde tus archivos TXT
-    try:
-        with open('Webshare 10 proxies.txt', 'r') as f:
-            proxies = [line.strip() for line in f if line.strip()]
-        with open('links.txt', 'r') as f:
-            enlaces = [line.strip() for line in f if line.strip()]
-    except FileNotFoundError as e:
-        print(f"[!] Error: No se encontró el archivo: {e.filename}")
+# Lista de perfiles para engañar a ouo.io (Safari, Chrome, Edge)
+USER_AGENTS = [
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1", # Safari iPhone
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Safari/605.1.15",          # Safari Mac
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",    # Edge Windows
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"                             # Chrome Linux
+]
+
+async def ejecutar_sesion():
+    if not os.path.exists('Webshare 10 proxies.txt') or not os.path.exists('links.txt'):
+        print("[!] ERROR: Archivos .txt no encontrados")
         return
+
+    with open('Webshare 10 proxies.txt', 'r') as f:
+        proxies = [line.strip() for line in f if line.strip()]
+    with open('links.txt', 'r') as f:
+        enlaces = [line.strip() for line in f if line.strip()]
 
     async with async_playwright() as p:
         for url in enlaces:
-            exito = False
-            # Usar un proxy aleatorio de tus 10 nuevos para cada link
-            proxy_seleccionado = random.choice(proxies)
+            proxy_actual = random.choice(proxies)
+            ua_actual = random.choice(USER_AGENTS) # Elegimos navegador al azar
             
-            print(f"\n[*] Intentando: {url}")
-            print(f"[*] Usando Proxy: {proxy_seleccionado}")
+            print(f"\n[*] NAVEGANDO A: {url}")
+            print(f"[*] USANDO PROXY: {proxy_actual}")
+            print(f"[*] EMULANDO: {ua_actual[:50]}...")
 
-            # Configurar el navegador con el proxy
-            # Formato esperado en el txt: ip:puerto:user:pass o ip:puerto
-            browser = await p.chromium.launch(headless=True, proxy={"server": f"http://{proxy_seleccionado}"})
+            # Lanzamos Chromium pero lo disfrazamos con el User Agent
+            browser = await p.chromium.launch(headless=True, args=['--no-sandbox'])
+            
+            # Configuramos el contexto con el navegador elegido y el proxy
             context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+                user_agent=ua_actual,
+                proxy={"server": f"http://{proxy_actual}"},
+                viewport={'width': 1280, 'height': 720}
             )
+            
             page = await context.new_page()
 
             try:
-                # Navegar con timeout largo para evitar el error anterior
-                await page.goto(url, wait_until="domcontentloaded", timeout=90000)
+                # Timeout de 90s y carga inicial
+                await page.goto(url, wait_until="commit", timeout=90000)
                 
-                # ESPERA DE 20 SEGUNDOS (Solicitada para que cargue todo)
-                print(f"[+] Página alcanzada. Esperando 20 segundos para carga completa...")
+                # ESPERA DE 20 SEGUNDOS (Tu requerimiento)
+                print(f"[+] Página abierta. Esperando 20 segundos para validar...")
                 await asyncio.sleep(20)
                 
-                print(f"[#] Título actual: {await page.title()}")
-                
-                # --- AQUÍ PUEDES AGREGAR CLICS SI ES NECESARIO ---
-                # Ejemplo: await page.click('text=Confirmar') 
-                
-                exito = True
-                print(f"[SUCCESS] Proceso terminado para: {url}")
+                print(f"[SUCCESS] {url} completado.")
 
             except Exception as e:
-                print(f"[!] Error durante la navegación en {url}: {e}")
+                print(f"[!] Error: {str(e)[:50]}")
             
             finally:
+                await context.close()
                 await browser.close()
 
-# ESTA LÍNEA ES VITAL PARA QUE EL BOT ARRANQUE
 if __name__ == "__main__":
-    asyncio.run(procesar_enlaces())
+    asyncio.run(ejecutar_sesion())
