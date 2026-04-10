@@ -17,52 +17,53 @@ async def ejecutar_sesion():
                 proxy_config = {"server": f"http://{ip}:{puerto}", "username": user, "password": password}
             except: continue
 
-            # Lanzamos con argumentos para ocultar la automatización
+            # Lanzamos con camuflaje extra
             browser = await p.chromium.launch(headless=True, args=[
                 '--no-sandbox', 
-                '--disable-blink-features=AutomationControlled'
+                '--disable-blink-features=AutomationControlled',
+                '--use-fake-ui-for-media-stream'
             ])
             
-            # Simulamos un navegador Windows real con lenguaje español
             context = await browser.new_context(
                 proxy=proxy_config,
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-                locale="es-ES",
-                extra_http_headers={"Referer": "https://google.com"}
+                viewport={'width': 1366, 'height': 768}
             )
             page = await context.new_page()
 
-            print(f"\n[*] PROBANDO: {url} | PROXY: {ip}")
+            print(f"\n[*] PROCESANDO: {url} | PROXY: {ip}")
 
             try:
-                # Navegar y esperar a que el contenido básico cargue
-                response = await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                # 1. Carga inicial
+                await page.goto(url, wait_until="networkidle", timeout=60000)
                 
-                if response.status >= 400:
-                    print(f"    [!] Error HTTP {response.status}. Proxy posiblemente bloqueado.")
+                # --- PASO 1: I'M HUMAN ---
+                boton_1 = await page.wait_for_selector("button#btn-main", state="visible", timeout=35000)
+                print("    [+] Etapa 1 detectada. Esperando 15s...")
+                await asyncio.sleep(15)
+                await boton_1.click(force=True)
                 
-                # --- PASO 1: ESPERA AGRESIVA POR EL BOTÓN ---
-                try:
-                    # Esperamos hasta 40 segundos. Si no aparece, es bloqueo total.
-                    boton = await page.wait_for_selector("button#btn-main", state="visible", timeout=40000)
-                    print("    [+] Botón I'm Human detectado. Esperando 15s...")
-                    await asyncio.sleep(15)
-                    await boton.click(force=True)
-                    
-                    # --- PASO 2: GET LINK ---
+                # --- PASO 2: GET LINK ---
+                await asyncio.sleep(8)
+                if "ouo.io/press" in page.url:
+                    await page.go_back()
                     await asyncio.sleep(5)
-                    boton_get = await page.wait_for_selector("button#btn-main", state="visible", timeout=30000)
-                    print("    [+] Botón Get Link detectado. Esperando 15s...")
-                    await asyncio.sleep(15)
-                    await boton_get.click(force=True)
-                    
-                    await asyncio.sleep(10) # Tiempo para que cuente la vista
-                    print(f"[SUCCESS] ¡Vista completada!")
-                except:
-                    print(f"    [!] Bloqueo detectado. Título de página: {await page.title()}")
+
+                boton_2 = await page.wait_for_selector("button#btn-main", state="visible", timeout=35000)
+                print("    [+] Etapa 2 (Get Link) detectada. Esperando 20s para asegurar vista...")
+                # Esperamos 20s: 10 del contador + 10 de seguridad para el servidor
+                await asyncio.sleep(20)
+                
+                await boton_2.click(force=True)
+                print("    [*] Clic final realizado. Manteniendo conexión 10s más...")
+                
+                # ESPERA FINAL CRÍTICA para que el servidor registre el redireccionamiento
+                await asyncio.sleep(10)
+                print(f"[SUCCESS] Proceso completo para {url}")
 
             except Exception as e:
-                print(f"    [!] Error de red: {str(e)[:40]}")
+                titulo = await page.title()
+                print(f"    [!] Fallo o Bloqueo. Título: {titulo}")
             finally:
                 await browser.close()
 
