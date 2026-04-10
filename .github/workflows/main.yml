@@ -1,28 +1,26 @@
-name: Ouo Bot Session
+name: Ouo Bot Multi-Browser
 on:
-  workflow_dispatch: # Permite ejecutarlo manualmente
+  workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout código
+      - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Configurar Python
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
-      - name: Instalar Playwright y Dependencias
+      - name: Install Playwright
         run: |
-          python -m pip install --upgrade pip
           pip install playwright
-          # Esto instala los navegadores Y las librerías del sistema (vital)
           playwright install chromium
           playwright install-deps chromium
 
-      - name: Ejecutar Bot
+      - name: Execute
         run: python bot.py
         env:
           PYTHONUNBUFFERED: 1
