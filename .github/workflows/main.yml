@@ -1,5 +1,8 @@
-name: Ouo Bot Multi-Browser
-on:
+      run: |
+        pip install playwright
+        playwright install chromium firefox webkit
+        playwright install-deps
+
   workflow_dispatch:
 
 jobs:
