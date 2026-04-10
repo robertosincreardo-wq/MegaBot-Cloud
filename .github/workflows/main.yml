@@ -6,19 +6,21 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout del codigo
+      - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Configurar Python
+      - name: Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
-      - name: Instalar Playwright
+      - name: Playwright
         run: |
           pip install playwright
           playwright install chromium
           playwright install-deps chromium
 
-      - name: Ejecutar Bot
+      - name: Run
         run: python bot.py
+        env:
+          PYTHONUNBUFFERED: 1
