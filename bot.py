@@ -53,7 +53,7 @@ async def generar_dinero(proxy_line, ad_url):
 
 async def main():
     # Pon tu Direct Link aquí
-    MI_LINK = "https://highrevenuegate.com" 
+    MI_LINK = "https://www.profitablecpmratenetwork.com/x458ti0i?key=b90007f89e492911f0d12049a4118dd6" 
     
     if not os.path.exists('Webshare 10 proxies.txt'):
         print("Archivo de proxies no encontrado.")
