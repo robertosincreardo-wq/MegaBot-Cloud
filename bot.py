@@ -2,46 +2,54 @@ import asyncio
 import random
 from playwright.async_api import async_playwright
 
-async def generar_impresion(proxy_line, ad_url):
-    try:
-        ip, puerto, user, password = proxy_line.split(':')
-        proxy_config = {"server": f"http://{ip}:{puerto}", "username": user, "password": password}
-        
-        async with async_playwright() as p:
-            # Usamos Stealth para evitar baneos
+async def trabajar_link(proxy_line, link):
+    datos = proxy_line.split(':')
+    if len(datos) != 4: return
+    ip, puerto, user, password = datos
+    
+    proxy_config = {"server": f"http://{ip}:{puerto}", "username": user, "password": password}
+
+    async with async_playwright() as p:
+        try:
             browser = await p.chromium.launch(headless=True, args=['--no-sandbox'])
-            context = await browser.new_context(proxy=proxy_config)
+            context = await browser.new_context(proxy=proxy_config, user_agent="Mozilla/5.0...")
             page = await context.new_page()
 
-            print(f"[*] IP {ip}: Visitando link de Adsterra...")
-            # Entramos al SmartLink
-            await page.goto(ad_url, wait_until="networkidle", timeout=60000)
+            print(f"[*] IP {ip}: Generando dinero...")
+            await page.goto(link, wait_until="networkidle", timeout=60000)
             
-            # Permanencia aleatoria para simular lectura (20-40 segundos)
-            espera = random.randint(20, 40)
-            await asyncio.sleep(espera)
+            # SIMULACIÓN HUMANA PARA QUE PAGUEN:
+            # 1. Espera aleatoria
+            await asyncio.sleep(random.randint(15, 25))
             
-            print(f"[SUCCESS] IP {ip}: Impresión válida generada.")
+            # 2. Scroll para simular lectura
+            await page.mouse.wheel(0, random.randint(400, 900))
+            
+            # 3. EL TRUCO: Clic en cualquier parte para activar el anuncio
+            await page.mouse.click(random.randint(100, 500), random.randint(100, 500))
+            print(f"[+] IP {ip}: Clic de activación realizado.")
+            
+            await asyncio.sleep(10)
             await browser.close()
-    except Exception as e:
-        print(f"[!] IP {ip} falló: {str(e)[:50]}")
+            print(f"[SUCCESS] IP {ip}: Tarea completada.")
+
+        except:
+            if browser: await browser.close()
 
 async def main():
-    # PEGA AQUÍ TU DIRECT LINK DE ADSTERRA
-    MI_DIRECT_LINK = "TU_LINK_AQUI" 
+    # Pon aquí tu SmartLink de Monetag o Adsterra
+    MI_LINK = "https://www.profitablecpmratenetwork.com/x458ti0i?key=b90007f89e492911f0d12049a4118dd6" 
     with open('Webshare 10 proxies.txt', 'r') as f:
         proxies = [line.strip() for line in f if line.strip()]
 
-    # Rotamos los proxies en bucle para maximizar visitas
     while True:
-        tasks = []
-        # Lanzamos de 5 en 5 para no saturar
-        for p_line in random.sample(proxies, 5):
-            tasks.append(asyncio.create_task(generar_impresion(p_line, MI_DIRECT_LINK)))
-        
+        # Ejecutamos las 10 IPs en ráfagas para que parezca tráfico real
+        tasks = [asyncio.create_task(trabajar_link(p, MI_LINK)) for p in proxies]
         await asyncio.gather(*tasks)
-        print("[*] Ciclo completado. Esperando 2 minutos para rotar...")
-        await asyncio.sleep(120)
+        
+        # Espera de 10 minutos para que no sospechen de las mismas IPs
+        print("[*] Ciclo terminado. Esperando 10 min para limpiar IPs...")
+        await asyncio.sleep(600)
 
 if __name__ == "__main__":
     asyncio.run(main())
